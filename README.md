@@ -1,0 +1,27 @@
+# microsd
+
+<One sentence description of what the app does.>
+
+## Installation
+
+```bash
+git clone <repo url>
+cd microsd
+make setup
+```
+
+## Usage
+
+```bash
+make run
+```
+
+## Development
+
+```bash
+make check
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE)
