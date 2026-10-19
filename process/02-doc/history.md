@@ -1,1 +1,34 @@
 # History
+
+## 2026-10-18 – 2026-10-19
+
+- **Scaffold**: folder renamed to `microsd-utils`; spec written (macOS + Pi
+  microSD tools, Python, safety section). Makefile reduced to user-facing
+  targets (`help` default); dev commands run via `uv`. j3 kit got the
+  `make help` and tool-first Makefile rules.
+
+- **Safety design**: tools touch only the card in one USB reader, pinned by
+  IORegistry name + exact USB port (`sd_reader.json`); no disk arguments;
+  metadata-only discovery; fingerprint re-checked immediately before every
+  raw open. Commands print their plan, then re-run under `sudo` with an
+  explanation. Erasing needs an all-caps warning, `yes`, and the disk
+  identifier.
+
+- **F01 — health check, closed 2026-10-19**: `make validate` / `make stress`.
+  Measured on the 64 GB test card: read 70.1 MB/s (893 s), stress write
+  54.0 MB/s / verify 72.0 MB/s, 0 bad chunks, genuine capacity. Reader reports
+  no SMART/wear data; raw reads work while mounted. Wrong-port refusal marked
+  done at the user's direction (output not captured).
+
+- **F03 code**: graded verdict (EXCELLENT / GOOD / FAIR / RETIRE) from
+  sequential speed classes and A1/A2 random 4 KB IOPS; *looks brand new* as a
+  note.
+
+- **F02 code**: partition-table parser (MBR/GPT), image store in `images/`
+  (atomic publish, sidecar with size + SHA-256, chown to the sudo user,
+  `.img`/`.gz`/`.xz` input), backup, flash with double hash verification,
+  card-swap waits, guided `copy`; shared `session.py` extracted from
+  `check.py`. Review fix: copy's "looks like the master" check compared
+  identifiers and mount points, so it could never fire; now compares layout.
+
+- **Literate docs**: `process/01-literate/01`–`15` plus `X01`.

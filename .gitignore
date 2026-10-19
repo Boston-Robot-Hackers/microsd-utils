@@ -27,3 +27,6 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Card images made by backup/copy (large; never committed)
+images/

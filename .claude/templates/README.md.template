@@ -19,7 +19,7 @@ make run
 ## Development
 
 ```bash
-make check
+make ci
 ```
 
 ## License

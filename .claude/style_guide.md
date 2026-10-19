@@ -197,7 +197,14 @@ Applies to any project with a UI layer (Streamlit, Flask, Dash, etc.).
 
 ## Makefile
 
-- write a makefile for each project
-- `make help` should always give a short list of targets
-- specific targets might vary from project to project. Hereare examples, some or none of these might be appropriate for a particular project
-  - local, deploy, test, run, reset, etc,
+- Write a Makefile for each project.
+- `make help` is the default target and gives a short list of targets.
+- **The Makefile is primarily for the user of the tool.** User-facing targets
+  (e.g. `validate`, `copy`, `deploy`, `reset`) come first, under `##@ Tool`;
+  development targets (`setup`, `fmt`, `lint`, `test`, `ci`) follow under
+  `##@ Development`.
+- Every target `make help` should show carries a `## description` comment on
+  its rule line; that is what `help` lists.
+- Add a feature's user-facing targets as part of that feature's task list, not
+  as placeholders ahead of time.
+- Specific targets vary from project to project; the template shows the layout.

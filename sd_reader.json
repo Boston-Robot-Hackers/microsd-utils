@@ -1,0 +1,5 @@
+{
+  "registry_name": "NORELSYS 1081CS0 Media",
+  "device_tree_path": "IODeviceTree:/arm-io@10F00000/usb-drd2@92280000/usb-drd2-port-ss@02200000",
+  "bus_protocol": "USB"
+}

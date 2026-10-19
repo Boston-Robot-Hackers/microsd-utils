@@ -11,29 +11,47 @@ CHANGED_PY := $(shell { \
 	git ls-files --others --exclude-standard -- '*.py'; \
 } | sort -u)
 
-.PHONY: setup fmt lint test check run
+.PHONY: help setup fmt lint test ci run
 
-setup:
+.DEFAULT_GOAL := help
+
+# `make help` lists every target that has a `## description`, grouped under
+# the `##@` section headers. Tool targets (what a user of the app runs) come
+# first; development targets after.
+
+##@ Tool
+
+# Add user-facing targets here as features land, e.g.
+#   validate: ## Check a card (DISK=disk4)
+
+##@ Development
+
+help: ## List targets
+	@awk 'BEGIN {FS = ":.*## "} \
+		/^##@/ {printf "\n%s\n", substr($$0, 5)} \
+		/^[a-zA-Z_-]+:.*## / {printf "  %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+setup: ## Install dependencies (uv sync)
 	uv sync
 
-fmt:
+fmt: ## Format changed .py files with ruff
 	@if [ -z "$(CHANGED_PY)" ]; then \
 		echo "fmt: no changed .py files"; \
 	else \
 		uv run ruff format $(CHANGED_PY); \
 	fi
 
-lint:
+lint: ## Lint changed .py files with ruff
 	@if [ -z "$(CHANGED_PY)" ]; then \
 		echo "lint: no changed .py files"; \
 	else \
 		uv run ruff check $(CHANGED_PY); \
 	fi
 
-test:
+test: ## Run the test suite
 	uv run pytest
 
-check: fmt lint test
+ci: fmt lint test ## fmt + lint + test
 
-run:
+run: ## Run the app
 	./run.bash

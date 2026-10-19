@@ -23,8 +23,8 @@ We are developing an app called <APP NAME>. All process files live under
 ## Commands
 
 Run from the repo root: `make setup`, `make test`, `make fmt`/`make lint`
-(ruff, scoped to changed files only — never the whole repo), `make check`
-(fmt+lint+test), `make run`. See the `Makefile` for what each actually runs.
+(ruff, scoped to changed files only — never the whole repo), `make ci`
+(fmt+lint+test), `make run`. `make help` (the default) lists all targets; see the `Makefile` for what each actually runs.
 
 ## Session Start
 

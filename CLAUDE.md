@@ -22,9 +22,11 @@ We are developing an app called microsd. All process files live under
 
 ## Commands
 
-Run from the repo root: `make setup`, `make test`, `make fmt`/`make lint`
-(ruff, scoped to changed files only — never the whole repo), `make check`
-(fmt+lint+test), `make run`. See the `Makefile` for what each actually runs.
+The `Makefile` holds only user-facing tool targets (`make help` lists them).
+Development commands run through `uv` from the repo root: `uv sync` (setup),
+`uv run pytest` (tests; `-m manual` for the real-card tests), and
+`uv run ruff format` / `uv run ruff check` — on changed files only, never the
+whole repo.
 
 ## Session Start
 
