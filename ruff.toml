@@ -36,6 +36,9 @@ select = [
 #   leftover.
 # - T10 (flake8-debugger) and PLR1702 (too-many-nested-blocks): harmless to
 #   add; PLR1702 needs ruff's --preview mode in some versions.
+# ERA001 skips lines holding a task tag; the file-header stamps
+# (`# Version: 3`) otherwise read as commented-out code.
+task-tags = ["TODO", "FIXME", "XXX", "Version", "Created", "Updated"]
 
 [lint.pylint]
 max-branches = 8

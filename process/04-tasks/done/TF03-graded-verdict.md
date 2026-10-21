@@ -74,7 +74,7 @@ the real-card random read is exercised by `make validate` in TF03.6.
 **Test**: `uv run pytest` passes (108 tests, 2026-10-19).
 
 ## TF03.6 — Manual hardware run and calibration
-**Status**: not done
+**Status**: done (2026-10-21)
 **Description**: Run `make validate` and `make stress` on the test card.
 Check that Python's per-call overhead doesn't cap IOPS (compare the 4 KB loop
 against the measured rate, e.g. with `iostat`). Record IOPS in
@@ -83,3 +83,18 @@ show they are off.
 
 **Test**: not automatable — needs the real card, and stress wipes it.
 Covered by the `manual`-marked tests from TF03.5.
+
+**Result** (2026-10-21, card R2):
+
+- Python loop overhead is ~0.1% of a 4 KB read, so it doesn't cap IOPS.
+  `iostat` showed the same ~1,500 tps the tool reported.
+
+- R2 reads ~1,500 ±2% IOPS, with a ~7% slower first 8 s when cold, so the
+  bare A1 line flipped it between GOOD and FAIR on noise.
+
+- **Recalibrated toward GOOD**, per user: `READER_MARGIN = 0.95` on the A1/A2
+  thresholds and `WARMUP_SHARE = 0.2` uncounted at the start of each pass.
+  Details in `process/02-doc/notes.md`.
+
+**Test**: `uv run pytest` passes (247 tests): new tier boundaries, R2's
+numbers grade GOOD, warm-up errors still count.

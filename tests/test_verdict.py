@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # test_verdict — tests for factory-fresh signals and the verdict
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-21
 # Open Source Under MIT license
 
 import pytest
@@ -17,7 +17,9 @@ from microsd_utils.verdict import (
     Measurements,
     decide,
     random_tier,
+    read_a_class,
     sequential_grade,
+    write_a_class,
 )
 
 CARD_BYTES = 64_000_000_000
@@ -125,18 +127,25 @@ def test_sequential_tiers(write_mb_s, read_mb_s, grade):
 @pytest.mark.parametrize(
     "read_iops, write_iops, grade, a_class",
     [
-        (4000, 2000, Grade.EXCELLENT, "A2"),
-        (3999, 2000, Grade.GOOD, "A1"),
-        (4000, 1999, Grade.GOOD, "A1"),
-        (1500, 500, Grade.GOOD, "A1"),
-        (1499, 500, Grade.FAIR, "below A1"),
-        (1500, 499, Grade.FAIR, "below A1"),
+        (3800, 1900, Grade.EXCELLENT, "A2"),
+        (3799, 1900, Grade.GOOD, "A1"),
+        (3800, 1899, Grade.GOOD, "A1"),
+        (1425, 475, Grade.GOOD, "A1"),
+        (1424, 475, Grade.FAIR, "below A1"),
+        (1425, 474, Grade.FAIR, "below A1"),
         (0, 0, Grade.FAIR, "below A1"),
     ],
 )
 def test_random_tiers(read_iops, write_iops, grade, a_class):
     tier = random_tier(RandomResult(read_iops, 1.0), RandomResult(write_iops, 1.0))
     assert (tier.grade, tier.a_class) == (grade, a_class)
+
+
+def test_r2_measurement_grades_good():
+    # A real A1 card's numbers through the USB reader, just under the bare line.
+    tier = random_tier(RandomResult(1499, 1.0), RandomResult(980, 1.0))
+    assert tier.grade is Grade.GOOD
+    assert (read_a_class(1499), write_a_class(980)) == ("A1", "A1")
 
 
 def test_verdict_is_worst_of_sequential_and_random():

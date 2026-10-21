@@ -1,6 +1,6 @@
 ---
-version: "1.0"
-generated: "2026-10-19"
+version: "1.1"
+generated: "2026-10-21"
 ---
 
 # random_io — small scattered I/O, the Pi's real workload
@@ -30,16 +30,18 @@ Each pass issues one 4 KB request at a time at random 4 KB-aligned offsets, for 
 def timed_random_pass(region_bytes, duration_s, clock, operation) -> RandomResult:
     result = RandomResult()
     start = clock()
+    measure_from = start + WARMUP_SHARE * duration_s
     for offset in random_offsets(region_bytes):
-        if clock() - start >= duration_s:
+        now = clock()
+        if now - start >= duration_s:
             break
         try:
             operation(offset)
         except OSError:
             result.error_offsets.append(offset)
         else:
-            result.operations += 1
-    result.seconds = clock() - start
+            result.operations += int(now >= measure_from)
+    result.seconds = clock() - measure_from
     return result
 ```
 
@@ -48,6 +50,27 @@ Design choices worth noting:
 - **Time-bounded, not count-bounded.** A fast card and a slow card both take 30 s; the result is the number of operations completed. A count-bounded test would take minutes on a worn card.
 - **Queue depth of one.** The A-class spec measures at higher queue depths, so a card may score lower here than on its label. The comparison is still meaningful *between runs of this tool*, and a worn card drops regardless.
 - **Failed operations aren't counted as throughput** — they're recorded as errors, which `verdict.py` treats as RETIRE.
+
+## The warm-up
+
+On the real test card, `iostat` showed a **cold card running ~7% slower for its first ~8 s** (about 1,395 tps), then settling near 1,510. A card that has just been idle, or a reader waking from a low-power state, would otherwise drag the average down.
+
+So the first **`WARMUP_SHARE` (20%) of each pass is warm-up**:
+
+- **Operations** in the warm-up are issued but not counted.
+- **Time** is measured from `measure_from`, so IOPS = counted operations / counted seconds.
+- **Errors** are still recorded. A failure is a failure whenever it happens; the warm-up only discounts *speed*.
+
+```mermaid
+gantt
+    dateFormat s
+    axisFormat %S s
+    section 30 s pass
+    warm-up (errors count, ops don't) :a, 0, 6s
+    measured window (IOPS)            :b, after a, 24s
+```
+
+Making the warm-up a *share* of the duration rather than a fixed 5 s keeps the run at 30 s total and lets tests with a 0.01 s fake pass behave the same way.
 
 ## Reproducible randomness
 
@@ -82,10 +105,10 @@ Writes use one pre-generated block of pattern data, so generating bytes never co
 
 ## Testing without waiting
 
-The clock is injected. Tests pass a `TickingClock` that advances 1 ms per read, so a "1 second" pass runs about 1000 operations instantly, and the IOPS arithmetic is checked exactly.
+The clock is injected. Tests pass a `TickingClock` that advances 1 ms per read, so a "1 second" pass runs about 1000 operations instantly — about 800 of them counted after the warm-up — and the IOPS arithmetic is checked exactly. A separate test fails every read and checks that warm-up failures are still recorded.
 
 ## Observations and possible improvements
 
-1. **Python overhead is unmeasured.** Each operation costs a syscall plus a few microseconds of interpreter time; at A2 rates (~250 µs per op) that's small but not zero. TF03.6 should compare against `iostat`.
+1. **Python overhead is negligible — measured.** The loop alone runs at 0.2–0.7 µs per op; a 4 KB read at A1 rates takes ~667 µs, so the interpreter adds ~0.1%. `iostat` showed the same ~1,500 tps the tool reported.
 2. **Higher queue depth** (a few threads issuing requests) would match the A-class test conditions and let cards that support command queuing show it.
 3. **Latency percentiles.** A card averaging A1 but with occasional 500 ms stalls feels terrible on a Pi. Recording the slowest 1% of operations would catch it.

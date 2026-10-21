@@ -4,10 +4,10 @@ Feature file name must be `FNN-<slug>.md` where `NN` matches the feature number.
 # F03 — Graded health verdict with a random-I/O test
 **Priority**: Medium
 **Date Created:** 2026-10-18
-**Done:** no
+**Done:** yes
 **Tasks File Created:** yes
 **Tests Written:** yes
-**Test Passing:** no
+**Test Passing:** yes
 **Description**: Replace F01's single *still OK* with a graded verdict, and
 add a short random 4 KB I/O test, which is the most wear-sensitive signal
 available without SMART data.
@@ -27,8 +27,10 @@ The verdict is **EXCELLENT**, **GOOD**, **FAIR** or **RETIRE**. It is the
 - **Random I/O never retires a card on its own.** Many older cards predate the
   A1 class; slow random I/O means "sluggish as a Pi system disk", so it caps
   the grade at FAIR.
-- **Thresholds are named constants**, to be recalibrated after the TF03.6
-  hardware run.
+- **Thresholds are named constants**, recalibrated in TF03.6: a card within
+  5% of an A-class (`READER_MARGIN`) meets it, and the first 20% of each
+  random pass is an uncounted warm-up (`WARMUP_SHARE`). Borderline cards lean
+  toward the better grade.
 
 ### The random test
 

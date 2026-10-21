@@ -37,7 +37,10 @@ Each tool, or a group of closely related tools, becomes a feature (`F01`, `F02`,
     U3/V30 = 30 MB/s minimum write);
   - a short *random 4 KB* test (30–60 s) rated against the A1/A2 application
     classes (A1: 1500 read / 500 write IOPS; A2: 4000 / 2000). Random writes
-    happen in destructive mode only, before the full wipe.
+    happen in destructive mode only, before the full wipe. A card within 5%
+    of a class counts as meeting it, and the first 20% of each pass is an
+    uncounted warm-up: a USB reader measures a little low, so borderline
+    cards lean toward the better grade.
 
   Retire stays reserved for errors and speed below the U1 floor; slow random
   I/O alone lowers the grade to *fair*, it doesn't retire a card.

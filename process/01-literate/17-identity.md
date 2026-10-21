@@ -23,8 +23,13 @@ flowchart LR
 macOS can write FAT but not ext4, and a Raspberry Pi card is a FAT `bootfs` plus an ext4 root. So the manifest lives on the FAT volume:
 
 ```python
-FAT_CONTENTS = ("DOS_FAT_32", "Windows_FAT_32", "DOS_FAT_16",
-                "Windows_FAT_16", "Microsoft Basic Data")
+FAT_CONTENTS = (
+    "DOS_FAT_32",
+    "Windows_FAT_32",
+    "DOS_FAT_16",
+    "Windows_FAT_16",
+    "Microsoft Basic Data",
+)
 ```
 
 `card_volume` picks the first partition with one of these types, mounts it through the adapter, and returns the mount point. If there are several, it says which one it used.

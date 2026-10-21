@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # test_random_io — tests for the timed 4 KB random read and write passes
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-21
 # Open Source Under MIT license
 
 from itertools import islice
@@ -12,6 +12,7 @@ import pytest
 
 from microsd_utils.random_io import (
     BLOCK_BYTES,
+    WARMUP_SHARE,
     random_offsets,
     random_read_pass,
     random_write_pass,
@@ -47,11 +48,22 @@ def test_read_pass_stops_on_time_and_counts_iops():
         reads.append(offset)
         return bytes(length)
 
-    # Each loop reads the clock once; 1 s at 1 ms per tick is ~1000 operations.
+    # Each loop reads the clock once; 1 s at 1 ms per tick is ~1000 reads,
+    # the last 0.8 s of which (after warm-up) are counted.
     result = random_read_pass(read_at, REGION, duration_s=1.0, clock=TickingClock())
-    assert result.operations == len(reads)
-    assert 990 <= result.operations <= 1000
+    assert 990 <= len(reads) <= 1000
+    assert 790 <= result.operations <= 800
+    assert result.seconds == pytest.approx(1.0 - WARMUP_SHARE, abs=0.002)
     assert result.iops == pytest.approx(result.operations / result.seconds)
+
+
+def test_warmup_errors_still_count():
+    def read_at(offset, length):
+        raise OSError("I/O error")
+
+    # 0.1 s at 1 ms per tick puts the first ~20 failures inside the warm-up.
+    result = random_read_pass(read_at, REGION, duration_s=0.1, clock=TickingClock())
+    assert 95 <= len(result.error_offsets) <= 100
 
 
 def test_read_errors_are_counted_and_pass_continues():
@@ -83,7 +95,7 @@ def test_writes_stay_aligned_inside_region():
         duration_s=0.5,
         clock=TickingClock(),
     )
-    assert result.operations == len(writes) > 0
+    assert 0 < result.operations < len(writes)
     assert all(length == BLOCK_BYTES for _, length in writes)
     assert all(offset % BLOCK_BYTES == 0 and offset < REGION for offset, _ in writes)
 

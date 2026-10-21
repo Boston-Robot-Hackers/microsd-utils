@@ -1,6 +1,6 @@
 ---
-version: "2.0"
-generated: "2026-10-19"
+version: "2.1"
+generated: "2026-10-21"
 ---
 
 # verdict — grading a card from what we measured
@@ -75,6 +75,24 @@ RANDOM_TIERS = [
 
 The last tier has zero thresholds, so it **matches everything**. That's a *sentinel* — it lets `random_tier` be a single `next(...)` with no "not found" case, and it encodes a policy decision in data: **slow random I/O caps a card at FAIR but never retires it**. Many perfectly working cards predate the A1 class; they're sluggish as a Pi system disk, not broken.
 
+### The reader margin
+
+The A-class numbers are measured in an SD host. This tool reaches the card through a **USB reader, one request at a time**, and each 4 KB read is a full USB round trip. The 64 GB test card measured **~1,500 IOPS ±2%** — exactly on the A1 line, so the bare threshold flipped it between GOOD and FAIR on noise.
+
+The fix keeps the spec numbers in the table and applies a margin at comparison time:
+
+```python
+READER_MARGIN = 0.95
+
+
+def meets(iops: float, min_iops: float) -> bool:
+    return iops >= READER_MARGIN * min_iops
+```
+
+- **The table still reads like the spec** (1500 / 500, 4000 / 2000), so it can be checked against the SD Association's numbers at a glance.
+- **One helper** serves `random_tier`, `read_a_class` and `write_a_class`, so the grade and the `(A1)` labels in the report can never disagree.
+- **Borderline cards lean toward the better grade** — a deliberate bias. A card within 5% of A1 (≥ 1,425 read, ≥ 475 write) is an A1 card seen through a USB reader, not a worn one.
+
 ### Tier tables as `NamedTuple`s
 
 Both tables are lists of named tuples, best first, scanned top-down for the first tier the card meets. Named fields (`tier.min_write_mb_s`) keep the comparisons readable, and adding a tier is a one-line data change.
@@ -89,6 +107,6 @@ Freshness (`06-freshness.md`) doesn't change the grade. It sets `is_brand_new`, 
 
 ## Observations and possible improvements
 
-1. **Thresholds are uncalibrated.** They come from the SD specifications, not from measured cards; TF03.6 records real figures and may adjust them.
+1. **One card calibrated the margin.** 5% fits the test card's ±2% spread with room to spare; more cards (and a native SD slot for comparison) would show whether the reader's penalty is constant or card-dependent.
 2. **The label isn't known.** A card sold as V30 that measures 22 MB/s is GOOD here but underperforming. A `--rated-speed` option would let the verdict compare against the label.
 3. **Severity within RETIRE.** One bad chunk and a dying card get the same grade; the share of bad chunks would help the user judge.

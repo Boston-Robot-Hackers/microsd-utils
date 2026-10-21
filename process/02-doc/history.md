@@ -48,3 +48,19 @@
   the ID and writes the manifest back; flash and copy restore the target's own
   manifest; backup records the source card ID in the sidecar. Literate docs
   16–18 added, 02/09/12–15 updated.
+
+## 2026-10-21
+
+- **Ruff**: `Version`/`Created`/`Updated` added to `lint.task-tags`, so
+  ERA001 no longer flags the stamped file headers (also in the kit template).
+
+- **I01 opened**: a stress verdict is lost when the format step hangs (R3) or
+  the Mac sleeps mid-pass (R2). Workaround: `caffeinate -i make stress`.
+
+- **F03 — graded verdict, closed 2026-10-21** (TF03.6): R2 stress write
+  59.9 MB/s, verify 71.2 MB/s, 0 bad chunks; random 1,499 read / 980 write
+  IOPS. Python loop overhead is ~0.1% of a 4 KB read, and `iostat` matched
+  the tool's rate. R2 sits on the A1 line (±2%, cold start ~7% slower), so
+  grading now leans toward the better grade: `READER_MARGIN = 0.95` on the
+  A1/A2 thresholds and a 20% uncounted warm-up per random pass. Literate
+  docs 05 and 07 updated.

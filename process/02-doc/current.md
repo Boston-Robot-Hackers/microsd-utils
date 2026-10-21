@@ -3,18 +3,22 @@
 ## Open
 
 - **F04 — card identity** (`process/03-features/notdone/F04-card-identity.md`):
-  code and unit tests done (TF04.0–TF04.9; 245 tests pass). **TF04.10 open**:
-  real-card run — `make card` to tag, `make stress`, `make card`,
-  `make flash`, `make card`, `make cards`. Check the unverified assumptions:
-  macOS sees the new partitions after a raw flash (`mountDisk`, no
-  reinsertion); `diskutil mount` on a mounted volume succeeds; `make card`
-  can write the FAT volume without sudo; which `Content` types the reader
-  reports (factory exFAT may show as `Windows_NTFS`). The stress in this run
-  also gives TF03.6 its numbers.
+  code and unit tests done (TF04.0–TF04.9). **TF04.10 open**: real-card run.
+  Done 2026-10-21: tag (R2) and `make stress` (formatted FAT32, manifest
+  written, `stress` event recorded). Still to do: `make card`, `make flash`,
+  `make card`, `make cards`. Check the unverified assumptions: macOS sees the
+  new partitions after a raw flash (`mountDisk`, no reinsertion); `diskutil
+  mount` on a mounted volume succeeds; `make card` can write the FAT volume
+  without sudo; which `Content` types the reader reports (factory exFAT may
+  show as `Windows_NTFS`).
 
-- **Ruff `ERA001`**: flags every file header's `# Version:`/`# Created:` lines
-  as commented-out code (93 hits, pre-existing). Needs a per-pattern ignore in
-  the ruff config.
+- **I01 — stress verdict lost on hung format**
+  (`process/05-issues/open/I01-stress-verdict-lost-on-hung-format.md`):
+  found on bad card R3 (retired, noted in the registry). Needs a feature and
+  task file: record the verdict before formatting, and time out the `diskutil`
+  calls that write to the card, and keep the Mac awake (idle sleep dropped
+  the card mid-verify on R2; until fixed, run stress under `caffeinate -i`).
+  Also an open chore: sizes under 1 GB print as "0.0 GB".
 
 - **F02 — backup, flash, copy** (`process/03-features/notdone/F02-card-copy.md`):
   code and 181 unit tests done (TF02.0–TF02.8). **TF02.9 open**: real-card run
@@ -23,11 +27,6 @@
   `make copy NAME=pi-test2`, boot the copy. Record throughput, gzip cost, and
   whether the reader's disk vanishes from `diskutil` when the card is pulled
   (assumed by `swap.py`).
-
-- **F03 — graded verdict** (`process/03-features/notdone/F03-graded-verdict.md`):
-  code done (TF03.0–TF03.5). **TF03.6 open**: `make validate` / `make stress`
-  on a real card; check Python overhead doesn't cap 4 KB IOPS (compare with
-  `iostat`), record IOPS in `notes.md`, recalibrate thresholds if needed.
 
 - **Hardware rule**: only the card in the NORELSYS reader on port
   `usb-drd2-port-ss@02200000` may be touched (fingerprint in `sd_reader.json`).

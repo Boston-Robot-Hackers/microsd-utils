@@ -52,6 +52,7 @@ IDs come from a human reading a sticker, so they are validated once, where they 
 ```python
 ID_RE = re.compile(r"[A-Z0-9]{1,4}")
 
+
 def parse_id(text: str) -> str:
     card_id = text.strip().upper()
     if not ID_RE.fullmatch(card_id):

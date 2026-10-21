@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # verdict — grade a card from its measurements: excellent / good / fair / retire
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-21
 # Open Source Under MIT license
 """The verdict is an estimate: cards report no wear data, so it rests on
 errors, speed and the factory-fresh signal.
@@ -15,7 +15,9 @@ two grades, and the verdict is the worse of them:
   U3/V30 = 30 MB/s minimum write). Below the FAIR tier means RETIRE.
 - *random 4 KB*: tiers anchored on the A1/A2 application classes. Slow
   random I/O caps the grade at FAIR but never retires a card on its own,
-  since many older cards predate A1.
+  since many older cards predate A1. A card within `READER_MARGIN` of a
+  class's IOPS counts as meeting it, since a USB reader measures a little
+  low.
 
 In read-only mode only the read figures exist, and the verdict says so.
 Freshness doesn't change the grade; it adds a *looks brand new* note.
@@ -62,6 +64,9 @@ RANDOM_TIERS = [
     RandomTier(Grade.GOOD, "A1", 1500, 500),
     RandomTier(Grade.FAIR, "below A1", 0, 0),
 ]
+# A1/A2 ratings come from an SD host; through a USB reader, one request at
+# a time, an A1 card measured ~1,500 ±2%. Lean toward the better grade.
+READER_MARGIN = 0.95
 
 
 @dataclass(frozen=True)
@@ -109,21 +114,25 @@ def sequential_grade(read: PassResult, write: PassResult | None) -> Grade:
     return Grade.RETIRE
 
 
+def meets(iops: float, min_iops: float) -> bool:
+    return iops >= READER_MARGIN * min_iops
+
+
 def random_tier(read: RandomResult, write: RandomResult | None) -> RandomTier:
     return next(
         tier
         for tier in RANDOM_TIERS
-        if read.iops >= tier.min_read_iops
-        and (write is None or write.iops >= tier.min_write_iops)
+        if meets(read.iops, tier.min_read_iops)
+        and (write is None or meets(write.iops, tier.min_write_iops))
     )
 
 
 def read_a_class(iops: float) -> str:
-    return next(t.a_class for t in RANDOM_TIERS if iops >= t.min_read_iops)
+    return next(t.a_class for t in RANDOM_TIERS if meets(iops, t.min_read_iops))
 
 
 def write_a_class(iops: float) -> str:
-    return next(t.a_class for t in RANDOM_TIERS if iops >= t.min_write_iops)
+    return next(t.a_class for t in RANDOM_TIERS if meets(iops, t.min_write_iops))
 
 
 def sequential_reason(measured: Measurements, grade: Grade) -> str:

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # random_io — timed 4 KB random read and write passes
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-21
 # Open Source Under MIT license
 """Random 4 KB I/O, the workload a Raspberry Pi puts on its system card.
 
@@ -13,7 +13,8 @@ measure without SMART data. Results are compared against the SD
 Association's A1/A2 application classes in `verdict.py`.
 
 Each pass issues one 4 KB request at a time at seeded random, 4 KB-aligned
-offsets until its time is up, and reports operations per second (IOPS).
+offsets until its time is up, and reports operations per second (IOPS)
+over the time after a short warm-up.
 The clock is injected so tests run without sleeping.
 """
 
@@ -27,6 +28,8 @@ from microsd_utils.passes import ReadAt, WriteAt, pattern
 BLOCK_BYTES = 4096
 SCRATCH_BYTES = 1024**3
 RANDOM_SECONDS = 30.0
+# A cold card ran ~7% slower for its first ~8 s; don't count that.
+WARMUP_SHARE = 0.2
 SEED = 20261018
 
 Clock = Callable[[], float]
@@ -58,19 +61,23 @@ def timed_random_pass(
     operation: Callable[[int], None],
 ) -> RandomResult:
     """Run `operation(offset)` at random offsets until `duration_s` has passed.
-    An OSError from the operation is recorded as an error at that offset."""
+    The first `WARMUP_SHARE` of the time is warm-up: its operations and time
+    don't count toward IOPS, its errors do. An OSError from the operation is
+    recorded as an error at that offset."""
     result = RandomResult()
     start = clock()
+    measure_from = start + WARMUP_SHARE * duration_s
     for offset in random_offsets(region_bytes):
-        if clock() - start >= duration_s:
+        now = clock()
+        if now - start >= duration_s:
             break
         try:
             operation(offset)
         except OSError:
             result.error_offsets.append(offset)
         else:
-            result.operations += 1
-    result.seconds = clock() - start
+            result.operations += int(now >= measure_from)
+    result.seconds = clock() - measure_from
     return result
 
 
