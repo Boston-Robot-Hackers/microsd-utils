@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # test_check — tests for the `microsd check` flow, with every side effect faked
 # Author: Pito Salas and Claude Code
-# Version: 2
+# Version: 3
 # Created: 2026-10-19
-# Updated: 2026-10-20
+# Updated: 2026-10-21
 # Open Source Under MIT license
+
+import errno
 
 import pytest
 
@@ -17,7 +19,7 @@ from microsd_utils.check import (
     volume_names,
 )
 from microsd_utils.manifest import read_manifest
-from microsd_utils.passes import CHUNK_BYTES
+from microsd_utils.passes import CHUNK_BYTES, CardDisconnected
 from microsd_utils.reader import ReaderError, parse_card
 from microsd_utils.verdict import Grade, Verdict
 from tests.fakes import FakeCard, Recorder, load_plist, make_test_env, tag
@@ -252,8 +254,8 @@ def test_stress_reformats_and_writes_manifest_back(make_env, tmp_path):
     manifest = read_manifest(tmp_path / "volume")
     assert manifest.contents == "empty"
     assert [(e.event, e.detail) for e in manifest.history[1:]] == [
-        ("formatted", "FAT32"),
         ("stress", "EXCELLENT"),
+        ("formatted", "FAT32"),
     ]
     assert env.registry.lookup("A1") == manifest
     assert recorder.text.index("Verdict") < recorder.text.index("Manifest written")
@@ -284,6 +286,38 @@ def test_stress_failure_is_recorded_in_registry(make_env, monkeypatch):
     last = env.registry.lookup("A1").history[-1]
     assert (last.event, last.detail) == ("stress", "failed: I/O error")
     assert env.diskutil.erased == []
+
+
+def test_stress_result_is_recorded_when_format_fails(make_env):
+    def hung(identifier, volume_name):
+        raise TimeoutError("diskutil eraseDisk timed out")
+
+    recorder = Recorder(answers=["yes", "disk4"])
+    env = make_env(recorder, FakeCard(CARD_BYTES))
+    env.diskutil.erase_fat32 = hung
+    with pytest.raises(TimeoutError):
+        run_check(env, is_destructive=True, is_dry_run=False)
+    history = env.registry.lookup("A1").history
+    assert [(e.event, e.detail) for e in history[-2:]] == [
+        ("stress", "EXCELLENT"),
+        ("formatted", "failed: diskutil eraseDisk timed out"),
+    ]
+    assert "Verdict: EXCELLENT" in recorder.text
+
+
+def test_card_lost_during_stress_is_recorded_not_retired(make_env):
+    class LostCard(FakeCard):
+        def read_at(self, offset, length):
+            raise OSError(errno.ENXIO, "Device not configured")
+
+    recorder = Recorder(answers=["yes", "disk4"])
+    env = make_env(recorder, LostCard(CARD_BYTES))
+    with pytest.raises(CardDisconnected):
+        run_check(env, is_destructive=True, is_dry_run=False)
+    last = env.registry.lookup("A1").history[-1]
+    assert last.event == "stress"
+    assert last.detail.startswith("failed: card disconnected")
+    assert "Verdict" not in recorder.text
 
 
 def test_stress_dry_run_shows_reformat_and_card_id(make_env):

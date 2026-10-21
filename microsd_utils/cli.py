@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # cli — command-line entry point for the microsd tools
 # Author: Pito Salas and Claude Code
-# Version: 2
+# Version: 3
 # Created: 2026-10-19
-# Updated: 2026-10-20
+# Updated: 2026-10-21
 # Open Source Under MIT license
 """Command-line entry point: `microsd <command>`.
 
@@ -28,6 +28,7 @@ from microsd_utils.images import ImageError, ImageStore, sudo_owner
 from microsd_utils.imaging import run_backup, run_copy, run_flash
 from microsd_utils.manifest import IdentityError, Registry
 from microsd_utils.partitions import PartitionError
+from microsd_utils.passes import CardDisconnected
 from microsd_utils.random_io import RANDOM_SECONDS
 from microsd_utils.reader import ReaderError, load_fingerprint
 from microsd_utils.session import EXIT_ERROR, Env
@@ -41,6 +42,7 @@ EXPECTED_ERRORS = (
     PartitionError,
     TransferError,
     SwapError,
+    CardDisconnected,
     OSError,
     subprocess.CalledProcessError,
 )

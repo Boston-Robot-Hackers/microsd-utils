@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
 # test_passes — tests for whole-card read, write and verify passes
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-21
 # Open Source Under MIT license
+
+import errno
 
 import pytest
 
 from microsd_utils.device import RawDevice
-from microsd_utils.passes import chunks, pattern, read_pass, write_pass
+from microsd_utils.passes import (
+    CardDisconnected,
+    chunks,
+    pattern,
+    read_pass,
+    write_pass,
+)
 from tests.fakes import FakeCard
 
 CHUNK = 1024
@@ -95,3 +103,29 @@ def test_raw_device_round_trip_on_temp_file(tmp_path):
         )
     assert written.error_offsets == []
     assert verified.mismatch_offsets == []
+
+
+def failing_after(first_bad_offset, errno_code):
+    """read_at / write_at that fail with `errno_code` from an offset on."""
+
+    def access(offset, payload):
+        if offset >= first_bad_offset:
+            raise OSError(errno_code, "simulated")
+        return bytes(payload) if isinstance(payload, int) else None
+
+    return access
+
+
+@pytest.mark.parametrize("errno_code", [errno.ENXIO, errno.ENODEV])
+def test_lost_card_stops_read_and_write_passes(errno_code):
+    access = failing_after(4 * CHUNK, errno_code)
+    with pytest.raises(CardDisconnected, match="card disconnected"):
+        read_pass(access, SIZE, no_progress, chunk_bytes=CHUNK)
+    with pytest.raises(CardDisconnected):
+        write_pass(access, SIZE, no_progress, chunk_bytes=CHUNK)
+
+
+def test_bad_block_errno_is_still_counted():
+    access = failing_after(14 * CHUNK, errno.EIO)
+    result = read_pass(access, SIZE, no_progress, chunk_bytes=CHUNK)
+    assert result.error_offsets == [14 * CHUNK, 15 * CHUNK]

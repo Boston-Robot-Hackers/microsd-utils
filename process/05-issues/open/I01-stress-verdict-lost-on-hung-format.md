@@ -51,6 +51,9 @@
 
 ## Proposed fix
 
+**Taken up by F05** (`process/03-features/notdone/F05-stress-robustness.md`).
+Close this issue when F05 is done.
+
 **Behavior change: needs a feature and task file.**
 
 - Record the stress verdict in the registry right after `report`, before

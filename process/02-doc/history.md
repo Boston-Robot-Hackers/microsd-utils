@@ -64,3 +64,14 @@
   grading now leans toward the better grade: `READER_MARGIN = 0.95` on the
   A1/A2 thresholds and a 20% uncounted warm-up per random pass. Literate
   docs 05 and 07 updated.
+
+- **F05 code** (fixes I01; hardware step TF05.7 still open): stress records
+  its verdict before formatting, and a failed format is recorded too;
+  `diskutil` calls that change the card time out (`DiskutilTimeout`, 300 s
+  erase / 60 s others); `ENXIO`/`ENODEV` stops a pass with
+  `CardDisconnected` instead of counting bad chunks; long Makefile targets
+  run under `caffeinate -i`. Chore: `gigabytes` → `human_size`, MB below
+  1 GB. Literate docs 02, 04, 05, 13, 15 updated.
+
+- **Workflow**: no git worktrees in this repo; work happens in the main
+  checkout on `main`.

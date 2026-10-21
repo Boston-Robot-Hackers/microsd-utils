@@ -1,6 +1,6 @@
 ---
-version: "1.1"
-generated: "2026-10-19"
+version: "1.2"
+generated: "2026-10-21"
 ---
 
 # passes — reading, writing and verifying a whole card
@@ -57,7 +57,8 @@ This is the *template method* pattern done with a callback rather than inheritan
 
 ```mermaid
 flowchart TD
-    A[read_at offset, length] -->|OSError| E[record error_offset]
+    A[read_at offset, length] -->|"OSError, ENXIO/ENODEV"| G[raise CardDisconnected]
+    A -->|other OSError| E[record error_offset]
     A -->|data| B{len == length?}
     B -- no --> E
     B -- yes --> C{expected given?}
@@ -69,6 +70,29 @@ flowchart TD
 
 - **A failed chunk is recorded and skipped** — the pass always reaches the end. A card with one bad region should report *how much* is bad, not stop at the first error.
 - **A short read is an error.** On a raw device, fewer bytes than asked means the card stopped responding mid-chunk.
+
+### Bad block or lost card?
+
+"Record and keep going" is right for a bad block and badly wrong for a **card that is no longer there**. On 2026-10-21 the Mac idle-slept 82% into a verify; the USB reader dropped, and every remaining read failed instantly. The pass dutifully recorded 2,740 bad chunks and a healthy card was graded RETIRE.
+
+The two cases differ in their **errno**:
+
+```python
+# Errors meaning the device went away, not that a block is bad (EIO).
+GONE_ERRNOS = {errno.ENXIO, errno.ENODEV}
+
+
+def raise_if_gone(error: OSError) -> None:
+    if error.errno in GONE_ERRNOS:
+        raise CardDisconnected(f"card disconnected: {error}") from error
+```
+
+- **`EIO`** — the device answered, but the block is bad: count it, continue.
+- **`ENXIO` ("Device not configured") / `ENODEV`** — the device is gone: stop now, with no verdict.
+
+Both passes call `raise_if_gone` first in their `except OSError` block, and so does `random_io.py`. `CardDisconnected` is deliberately **not** an `OSError`, so no handler that records bad blocks can swallow it on the way up.
+
+Which errno macOS actually reports for a pulled USB card is **unverified** until the TF05.7 hardware test; if it differs, only `GONE_ERRNOS` changes.
 
 ## The write pattern and fake-capacity cards
 

@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # test_random_io — tests for the timed 4 KB random read and write passes
 # Author: Pito Salas and Claude Code
-# Version: 2
+# Version: 3
 # Created: 2026-10-19
 # Updated: 2026-10-21
 # Open Source Under MIT license
 
+import errno
 from itertools import islice
 
 import pytest
 
+from microsd_utils.passes import CardDisconnected
 from microsd_utils.random_io import (
     BLOCK_BYTES,
     WARMUP_SHARE,
@@ -107,3 +109,11 @@ def test_write_errors_are_counted():
     result = random_write_pass(write_at, REGION, duration_s=0.01, clock=TickingClock())
     assert result.operations == 0
     assert len(result.error_offsets) > 0
+
+
+def test_lost_card_stops_random_pass():
+    def read_at(offset, length):
+        raise OSError(errno.ENXIO, "Device not configured")
+
+    with pytest.raises(CardDisconnected):
+        random_read_pass(read_at, REGION, duration_s=0.1, clock=TickingClock())

@@ -1,6 +1,6 @@
 ---
-version: "2.1"
-generated: "2026-10-20"
+version: "2.2"
+generated: "2026-10-21"
 ---
 
 # check — the health check, end to end
@@ -30,7 +30,9 @@ flowchart TD
     D -- yes --> P1[run passes]
     P1 -->|exception| R[record failure in registry, re-raise]
     P1 --> V1[grade + report]
-    V1 --> T["retag: erase FAT32 named ID,<br/>write manifest + stress entry"]
+    V1 --> S1["record stress GRADE<br/>in registry"]
+    S1 --> T["retag: erase FAT32 named ID,<br/>write manifest + formatted entry"]
+    T -->|erase fails / times out| R2[record format failure, re-raise]
     C -- no --> P[run passes]
     P --> V[grade + report]
 ```
@@ -47,13 +49,24 @@ Two ordering choices are load-bearing:
 
 ### Keeping the card's identity through a wipe
 
-A stress run overwrites every block, manifest included. `run_check` therefore reads the manifest first, and after the verdict `retag` does three things:
+A stress run overwrites every block, manifest included. `run_check` therefore reads the manifest first, and after the report it **records the verdict straight away** — `stress <GRADE>`, contents `empty` — in the registry. Only then does `retag`:
 
-1. re-checks the reader, then `erase_fat32(card, ID)` — the card gets a fresh FAT32 volume named after its label;
-2. re-discovers the card, so the new partition is known;
-3. writes the manifest back with two entries, `formatted` and `stress <GRADE>`, and contents `empty`.
+1. re-check the reader, then `erase_fat32(card, ID)` — the card gets a fresh FAT32 volume named after its label;
+2. re-discover the card, so the new partition is known;
+3. write the manifest back with a `formatted FAT32` entry.
 
-If the passes raise (a device error, a pulled card), `stress_passes` records `stress failed: <error>` in the registry and re-raises. The card itself can't be written at that point, but the history isn't lost.
+**Why the verdict comes first.** Formatting talks to the card again, and a failing card can hang it. Originally the verdict was only saved at the very end, inside `retag`, so a hung format (card R3) lost a 35-minute result. Now the history reads `stress` → `formatted`, and a format that raises or times out adds `formatted failed: <error>` before re-raising.
+
+All three registry writes go through one helper:
+
+```python
+def record_event(env, manifest, kind, detail, contents=None) -> Manifest:
+    updated = manifest.with_event(event(env, kind, detail), contents)
+    env.registry.record(updated, stamp(env))
+    return updated
+```
+
+If the passes themselves raise — a device error, or `CardDisconnected` when the card drops off USB — `stress_passes` records `stress failed: <error>` and re-raises. No verdict is printed, so a lost card can't masquerade as a RETIRE.
 
 ## The passes
 
@@ -107,5 +120,5 @@ Each random direction gets its own A-class label (`read_a_class`, `write_a_class
 ## Observations and possible improvements
 
 1. **No ETA.** A 36-minute stress test shows percentages only; MB/s and time remaining on the progress line would answer the user's first question.
-2. **Ctrl-C mid-stress** leaves the card in an undefined state without saying so; catching `KeyboardInterrupt` to report it would be kinder.
+2. **Ctrl-C mid-stress** leaves the card in an undefined state without saying so, and records nothing; treating `KeyboardInterrupt` like the other pass failures would put it in the history.
 3. **The card and plan print twice** (before and after sudo). Harmless, and doubles as confirmation, but could be suppressed in the elevated run.

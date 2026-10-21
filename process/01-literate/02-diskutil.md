@@ -1,6 +1,6 @@
 ---
-version: "1.2"
-generated: "2026-10-20"
+version: "1.3"
+generated: "2026-10-21"
 ---
 
 # diskutil — a narrow adapter over macOS's disk tool
@@ -57,6 +57,33 @@ Three methods were added for card identity (F04):
 - **`mount_disk(identifier)`** — after a raw flash, ask macOS to mount the card's new partitions so the manifest can be written into `bootfs`.
 - **`erase_fat32(identifier, volume_name)`** — `diskutil eraseDisk FAT32 <ID> MBRFormat diskN`, used after `stress` so the wiped card has somewhere to hold its manifest. The volume is named after the card ID, so Finder shows the label.
 
+## Timeouts on commands that change the card
+
+Queries (`list`, `info`) answer from macOS's own state and return at once. Commands that **change the card** — unmount, mount, eject, erase — wait on the card itself, and a failing card can make them wait forever: on 2026-10-21, `eraseDisk` on a dying 32 MB card was still running after six minutes, silently.
+
+So every changing command goes through one helper with a timeout:
+
+```python
+ERASE_TIMEOUT_S = 300
+CHANGE_TIMEOUT_S = 60
+
+
+def run_change(args: list[str], timeout_s: int) -> None:
+    try:
+        subprocess.run(
+            ["diskutil", *args], capture_output=True, check=True, timeout=timeout_s
+        )
+    except subprocess.TimeoutExpired as error:
+        command = " ".join(["diskutil", *args])
+        raise DiskutilTimeout(f"{command} did not finish in {timeout_s} s") from error
+```
+
+- **`DiskutilTimeout` subclasses `TimeoutError`**, itself an `OSError`, so the CLI's error boundary already prints it as one `microsd: …` line.
+- **Erase gets five minutes, the rest one.** A healthy format takes seconds; the long limit only exists so a slow-but-working card isn't cut off.
+- **`subprocess.run` kills the child on timeout**, so no orphaned `diskutil` keeps the card busy.
+
+In `stress`, a timed-out format is recorded in the card's history *after* the verdict, which was saved first (see `13-check.md`).
+
 ## Where it sits
 
 ```mermaid
@@ -72,4 +99,4 @@ The class is the concrete implementation of `session.DiskutilCommands` (which ex
 
 1. **Surface `diskutil`'s stderr.** On failure, `CalledProcessError`'s message is just the command and exit code; `diskutil`'s own explanation (e.g. "Unmount failed: resource busy") is captured but dropped. Raising with `result.stderr` included would make failures self-explanatory.
 2. **Full path to the binary.** Invoking `/usr/sbin/diskutil` rather than `diskutil` removes any dependence on `PATH`, which matters slightly more once the tool re-runs itself under `sudo`.
-3. **No timeout.** A hung `diskutil` (rare, but seen with failing media) hangs the tool. A generous `timeout=` on `subprocess.run` would turn that into a clear error.
+3. **Timeouts are guesses.** 300 s and 60 s are generous, not measured; a progress-reporting erase (`diskutil` prints percentages for some formats) could replace the fixed limit.

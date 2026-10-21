@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # random_io — timed 4 KB random read and write passes
 # Author: Pito Salas and Claude Code
-# Version: 2
+# Version: 3
 # Created: 2026-10-19
 # Updated: 2026-10-21
 # Open Source Under MIT license
@@ -23,7 +23,7 @@ import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 
-from microsd_utils.passes import ReadAt, WriteAt, pattern
+from microsd_utils.passes import ReadAt, WriteAt, pattern, raise_if_gone
 
 BLOCK_BYTES = 4096
 SCRATCH_BYTES = 1024**3
@@ -63,7 +63,7 @@ def timed_random_pass(
     """Run `operation(offset)` at random offsets until `duration_s` has passed.
     The first `WARMUP_SHARE` of the time is warm-up: its operations and time
     don't count toward IOPS, its errors do. An OSError from the operation is
-    recorded as an error at that offset."""
+    recorded as an error at that offset, unless the card is gone."""
     result = RandomResult()
     start = clock()
     measure_from = start + WARMUP_SHARE * duration_s
@@ -73,7 +73,8 @@ def timed_random_pass(
             break
         try:
             operation(offset)
-        except OSError:
+        except OSError as error:
+            raise_if_gone(error)
             result.error_offsets.append(offset)
         else:
             result.operations += int(now >= measure_from)

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # imaging — the backup, flash and copy commands
 # Author: Pito Salas and Claude Code
-# Version: 2
+# Version: 3
 # Created: 2026-10-19
-# Updated: 2026-10-20
+# Updated: 2026-10-21
 # Open Source Under MIT license
 """`microsd backup`, `flash` and `copy`, all on the card in the designated reader.
 
@@ -49,7 +49,7 @@ from microsd_utils.session import (
     card_line,
     confirmed_erase,
     erase_warning,
-    gigabytes,
+    human_size,
     preflight,
     progress_printer,
 )
@@ -74,7 +74,7 @@ def backup_into(env: Env, card: CardInfo, name: str, card_id: str | None) -> Ima
     env.diskutil.unmount_disk(card.identifier)
     with env.open_device(card, False) as device:
         length = copy_length(device.read_at, card.size_bytes, card.block_size_bytes)
-        env.out(f"Copying {gigabytes(length)}, up to the end of the last partition.")
+        env.out(f"Copying {human_size(length)}, up to the end of the last partition.")
         with env.images.create(name) as stream:
             on_progress = progress_printer("Backup", env.out)
             timing, sha256 = backup_card(device.read_at, length, stream, on_progress)

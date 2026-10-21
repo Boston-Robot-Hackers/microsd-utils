@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # session — what every microsd command shares: environment, elevation, prompts
 # Author: Pito Salas and Claude Code
-# Version: 2
+# Version: 3
 # Created: 2026-10-19
-# Updated: 2026-10-20
+# Updated: 2026-10-21
 # Open Source Under MIT license
 """The pieces every command uses.
 
@@ -71,13 +71,15 @@ class Env:
         return {"clock": self.clock, "sleep": self.sleep}
 
 
-def gigabytes(size_bytes: int) -> str:
+def human_size(size_bytes: int) -> str:
+    if size_bytes < 1e9:
+        return f"{size_bytes / 1e6:.0f} MB"
     return f"{size_bytes / 1e9:.1f} GB"
 
 
 def card_line(label: str, card: CardInfo) -> str:
     return (
-        f"{label}: {card.identifier}  {card.media_name}  {gigabytes(card.size_bytes)}"
+        f"{label}: {card.identifier}  {card.media_name}  {human_size(card.size_bytes)}"
     )
 
 
@@ -102,7 +104,7 @@ def erase_warning(card: CardInfo) -> str:
         f"{rule}\n"
         f"  WARNING: EVERYTHING ON THIS CARD WILL BE ERASED.\n"
         f"  ALL FILES AND PARTITIONS ON {card.identifier} ({card.media_name}, "
-        f"{gigabytes(card.size_bytes)}) WILL BE DESTROYED.\n"
+        f"{human_size(card.size_bytes)}) WILL BE DESTROYED.\n"
         f"  THIS CANNOT BE UNDONE.\n"
         f"{rule}"
     )

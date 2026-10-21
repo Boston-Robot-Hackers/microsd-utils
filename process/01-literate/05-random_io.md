@@ -1,5 +1,5 @@
 ---
-version: "1.1"
+version: "1.2"
 generated: "2026-10-21"
 ---
 
@@ -37,7 +37,8 @@ def timed_random_pass(region_bytes, duration_s, clock, operation) -> RandomResul
             break
         try:
             operation(offset)
-        except OSError:
+        except OSError as error:
+            raise_if_gone(error)
             result.error_offsets.append(offset)
         else:
             result.operations += int(now >= measure_from)
@@ -49,7 +50,7 @@ Design choices worth noting:
 
 - **Time-bounded, not count-bounded.** A fast card and a slow card both take 30 s; the result is the number of operations completed. A count-bounded test would take minutes on a worn card.
 - **Queue depth of one.** The A-class spec measures at higher queue depths, so a card may score lower here than on its label. The comparison is still meaningful *between runs of this tool*, and a worn card drops regardless.
-- **Failed operations aren't counted as throughput** — they're recorded as errors, which `verdict.py` treats as RETIRE.
+- **Failed operations aren't counted as throughput** — they're recorded as errors, which `verdict.py` treats as RETIRE. The exception is a card that has disappeared: `raise_if_gone` (from `passes.py`, see `04-passes.md`) stops the pass instead of recording thousands of instant failures.
 
 ## The warm-up
 

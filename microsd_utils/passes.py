@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # passes — chunked read, write and verify passes over a card
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-21
 # Open Source Under MIT license
 """Whole-card passes in fixed-size chunks.
 
 `read_pass` reads every chunk, recording chunks that fail to read and,
 when given an `expected` generator, chunks whose content differs. A failed
-chunk is recorded and skipped; the pass always runs to the end.
+chunk is recorded and skipped, so the pass runs to the end, unless the error
+says the card itself is gone: then it stops with `CardDisconnected` rather
+than recording every remaining chunk as bad.
 
 `write_pass` fills every chunk with `pattern(offset, length)`: pseudo-random
 bytes seeded by the chunk's offset. Because each chunk's content depends on
@@ -20,6 +22,7 @@ Both take plain `read_at` / `write_at` callables so they run unchanged on a
 temp file in tests.
 """
 
+import errno
 import random
 import time
 from collections.abc import Callable, Iterator
@@ -27,10 +30,21 @@ from dataclasses import dataclass, field
 
 CHUNK_BYTES = 4 * 1024 * 1024
 BYTES_PER_MB = 1_000_000
+# Errors meaning the device went away, not that a block is bad (EIO).
+GONE_ERRNOS = {errno.ENXIO, errno.ENODEV}
 
 ReadAt = Callable[[int, int], bytes]
 WriteAt = Callable[[int, bytes], None]
 Progress = Callable[[int, int], None]
+
+
+class CardDisconnected(Exception):
+    """The card left the reader mid-pass (pulled out, or the Mac slept)."""
+
+
+def raise_if_gone(error: OSError) -> None:
+    if error.errno in GONE_ERRNOS:
+        raise CardDisconnected(f"card disconnected: {error}") from error
 
 
 @dataclass
@@ -80,7 +94,8 @@ def read_pass(
     def read_chunk(result: PassResult, offset: int, length: int) -> None:
         try:
             data = read_at(offset, length)
-        except OSError:
+        except OSError as error:
+            raise_if_gone(error)
             result.error_offsets.append(offset)
             return
         if len(data) != length:
@@ -100,7 +115,8 @@ def write_pass(
     def write_chunk(result: PassResult, offset: int, length: int) -> None:
         try:
             write_at(offset, pattern(offset, length))
-        except OSError:
+        except OSError as error:
+            raise_if_gone(error)
             result.error_offsets.append(offset)
 
     return timed_pass(size_bytes, chunk_bytes, on_progress, write_chunk)

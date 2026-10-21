@@ -1,6 +1,6 @@
 ---
-version: "2.1"
-generated: "2026-10-20"
+version: "2.2"
+generated: "2026-10-21"
 ---
 
 # cli — the `microsd` command
@@ -78,15 +78,17 @@ def elevate() -> NoReturn:
 EXPECTED_ERRORS = (
     ReaderError,
     ImageError,
+    IdentityError,
     PartitionError,
     TransferError,
     SwapError,
+    CardDisconnected,
     OSError,
     subprocess.CalledProcessError,
 )
 ```
 
-Each module raises its own exception type for failures a user can act on — no card, bad image name, corrupt partition table, verification failed, swap timed out. These become a one-line `microsd: …` message and exit code 1. Anything else is a bug and keeps its full traceback.
+Each module raises its own exception type for failures a user can act on — no card, bad image name, corrupt partition table, verification failed, swap timed out, card disconnected mid-pass. A `diskutil` command that times out raises `DiskutilTimeout`, an `OSError`, so it needs no entry of its own. These become a one-line `microsd: …` message and exit code 1. Anything else is a bug and keeps its full traceback.
 
 ## Observations and possible improvements
 

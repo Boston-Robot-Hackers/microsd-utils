@@ -45,6 +45,12 @@ Each tool, or a group of closely related tools, becomes a feature (`F01`, `F02`,
   Retire stays reserved for errors and speed below the U1 floor; slow random
   I/O alone lowers the grade to *fair*, it doesn't retire a card.
 
+  **Robustness** (F05): stress records its result before it reformats the
+  card, and a format that fails or hangs past its timeout is recorded too. A
+  card that disconnects mid-pass (pulled, or the Mac slept) stops the run
+  with "card disconnected" instead of counting bad chunks. The Makefile runs
+  long commands under `caffeinate -i` so the Mac stays awake.
+
 - **Backup, flash and copy (macOS)**: three related commands built on one
   image store, `images/` in the repo (git-ignored; images are kept for reuse):
   - *backup*: read a card into a compressed image file.

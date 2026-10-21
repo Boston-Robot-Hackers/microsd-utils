@@ -12,13 +12,16 @@
   without sudo; which `Content` types the reader reports (factory exFAT may
   show as `Windows_NTFS`).
 
-- **I01 — stress verdict lost on hung format**
-  (`process/05-issues/open/I01-stress-verdict-lost-on-hung-format.md`):
-  found on bad card R3 (retired, noted in the registry). Needs a feature and
-  task file: record the verdict before formatting, and time out the `diskutil`
-  calls that write to the card, and keep the Mac awake (idle sleep dropped
-  the card mid-verify on R2; until fixed, run stress under `caffeinate -i`).
-  Also an open chore: sizes under 1 GB print as "0.0 GB".
+- **F05 — stress robustness, fixes I01**
+  (`process/03-features/notdone/F05-stress-robustness.md`): code and tests
+  done and committed (TF05.0–TF05.6, 263 tests pass). Stress records its
+  result before formatting; card-changing `diskutil` calls time out; a lost
+  card (`ENXIO`/`ENODEV`) stops the pass; long Makefile targets run under
+  `caffeinate -i`; sizes under 1 GB print in MB. **TF05.7 open**, deferred
+  by the user: pull the card mid-`make validate` (expect "card disconnected",
+  record the errno; adjust `GONE_ERRNOS` in `passes.py` if it differs), then
+  a full `make stress` and check `make cards` lists `stress` before
+  `formatted`. Then close F05 and move I01 to `closed/`.
 
 - **F02 — backup, flash, copy** (`process/03-features/notdone/F02-card-copy.md`):
   code and 181 unit tests done (TF02.0–TF02.8). **TF02.9 open**: real-card run

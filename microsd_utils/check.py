@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # check — the `microsd check` command: find the card, test it, give a verdict
 # Author: Pito Salas and Claude Code
-# Version: 2
+# Version: 3
 # Created: 2026-10-19
-# Updated: 2026-10-20
+# Updated: 2026-10-21
 # Open Source Under MIT license
 """Orchestrates a health check of the card in the designated reader.
 
@@ -61,7 +61,7 @@ from microsd_utils.session import (
     card_line,
     confirmed_erase,
     erase_warning,
-    gigabytes,
+    human_size,
     preflight,
     progress_printer,
 )
@@ -88,10 +88,10 @@ def describe_plan(card: CardInfo, is_destructive: bool) -> str:
         return (
             f"Plan: unmount {card.identifier}, random 4 KB writes and reads, then "
             f"write and verify every block of {card.raw_device} "
-            f"({gigabytes(card.size_bytes)}), then format it FAT32 and write "
+            f"({human_size(card.size_bytes)}), then format it FAT32 and write "
             f"its manifest back.\n{erase_warning(card)}"
         )
-    size = gigabytes(card.size_bytes)
+    size = human_size(card.size_bytes)
     return (
         f"Plan: random 4 KB reads, then read every block of {card.raw_device} ({size})."
     )
@@ -156,25 +156,36 @@ def run_passes(env: Env, card: CardInfo, is_destructive: bool) -> Measurements:
     return Measurements(read, write, random_read, random_write)
 
 
+def record_event(
+    env: Env, manifest: Manifest, kind: str, detail: str, contents: str | None = None
+) -> Manifest:
+    """Add an event to the card's history and save it in the registry."""
+    updated = manifest.with_event(event(env, kind, detail), contents)
+    env.registry.record(updated, stamp(env))
+    return updated
+
+
 def stress_passes(env: Env, card: CardInfo, manifest: Manifest) -> Measurements:
     """Destructive passes; a failure is recorded against the card, then raised."""
     try:
         return run_passes(env, card, True)
     except Exception as error:
-        failed = manifest.with_event(event(env, "stress", f"failed: {error}"))
-        env.registry.record(failed, stamp(env))
+        record_event(env, manifest, "stress", f"failed: {error}")
         raise
 
 
-def retag(env: Env, card: CardInfo, manifest: Manifest, grade: Grade) -> None:
+def retag(env: Env, card: CardInfo, manifest: Manifest) -> None:
     """Format the wiped card FAT32, named after its ID, and put the manifest
-    back with the result."""
+    back. A failed format is recorded against the card, then raised."""
     recheck(env.diskutil, env.fingerprint, card)
     env.out(f"Formatting {card.identifier} FAT32 as {manifest.card_id}...")
-    env.diskutil.erase_fat32(card.identifier, manifest.card_id)
+    try:
+        env.diskutil.erase_fat32(card.identifier, manifest.card_id)
+    except Exception as error:
+        record_event(env, manifest, "formatted", f"failed: {error}")
+        raise
     formatted = discover(env.diskutil, env.fingerprint)
-    result = manifest.with_event(event(env, "formatted", "FAT32"), contents="empty")
-    store(env, formatted, result.with_event(event(env, "stress", grade.name)))
+    store(env, formatted, manifest.with_event(event(env, "formatted", "FAT32")))
 
 
 def run_check(env: Env, is_destructive: bool, is_dry_run: bool) -> int:
@@ -197,5 +208,9 @@ def run_check(env: Env, is_destructive: bool, is_dry_run: bool) -> int:
     verdict = decide(measured, fresh)
     report(env, measured, verdict)
     if is_destructive:
-        retag(env, card, manifest, verdict.grade)
+        # Recorded before formatting, so a hung or failed format can't lose it.
+        stressed = record_event(
+            env, manifest, "stress", verdict.grade.name, contents="empty"
+        )
+        retag(env, card, stressed)
     return EXIT_RETIRE if verdict.grade is Grade.RETIRE else EXIT_OK

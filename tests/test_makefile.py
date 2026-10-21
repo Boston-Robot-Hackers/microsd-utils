@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # test_makefile — the Makefile's tool targets run the expected commands
 # Author: Pito Salas and Claude Code
-# Version: 2
+# Version: 3
 # Created: 2026-10-19
-# Updated: 2026-10-20
+# Updated: 2026-10-21
 # Open Source Under MIT license
 
 import subprocess
@@ -28,15 +28,18 @@ def make(*args: str) -> str:
 @pytest.mark.parametrize(
     "args, command",
     [
-        (["validate"], ".venv/bin/microsd check"),
-        (["stress"], ".venv/bin/microsd check --destructive"),
+        (["validate"], "caffeinate -i .venv/bin/microsd check"),
+        (["stress"], "caffeinate -i .venv/bin/microsd check --destructive"),
         (
             ["stress", "DRY_RUN=1"],
-            ".venv/bin/microsd check --destructive --dry-run",
+            "caffeinate -i .venv/bin/microsd check --destructive --dry-run",
         ),
-        (["backup", "NAME=pi"], '.venv/bin/microsd backup "pi"'),
-        (["flash", "IMAGE=pi", "DRY_RUN=1"], '.venv/bin/microsd flash "pi" --dry-run'),
-        (["copy", "NAME=pi"], '.venv/bin/microsd copy "pi"'),
+        (["backup", "NAME=pi"], 'caffeinate -i .venv/bin/microsd backup "pi"'),
+        (
+            ["flash", "IMAGE=pi", "DRY_RUN=1"],
+            'caffeinate -i .venv/bin/microsd flash "pi" --dry-run',
+        ),
+        (["copy", "NAME=pi"], 'caffeinate -i .venv/bin/microsd copy "pi"'),
         (["card"], ".venv/bin/microsd card"),
         (["card", "DRY_RUN=1"], ".venv/bin/microsd card --dry-run"),
         (["cards"], ".venv/bin/microsd cards"),
