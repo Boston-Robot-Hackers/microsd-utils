@@ -30,3 +30,6 @@ Thumbs.db
 
 # Card images made by backup/copy (large; never committed)
 images/
+
+# Registry of known cards (card IDs and history; local to this machine)
+.microsd_tools/

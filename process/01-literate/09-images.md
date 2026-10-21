@@ -1,6 +1,6 @@
 ---
-version: "1.0"
-generated: "2026-10-19"
+version: "1.1"
+generated: "2026-10-20"
 ---
 
 # images — the image store
@@ -57,6 +57,8 @@ This is the classic **write-then-rename** pattern. `rename` within one directory
 ## Ownership under sudo
 
 The tools run as root, so every file they create would be owned by root and undeletable without `sudo`. `sudo` exports the invoking user's IDs as `SUDO_UID` and `SUDO_GID`; the store hands each new file and the directory back to that user. The `chown` call is injected so tests can check it without being root.
+
+The hand-back itself is a module-level `give_to_owner(path, owner, chown)`, so the card registry (`16-manifest.md`) shares it instead of keeping a copy. The sidecar also records **`source_card_id`** — the label ID of the card that was backed up, or `null` for an untagged card. Old sidecars without the field still load, since `find` only reads `data_bytes` and `sha256`.
 
 ## Three formats in, one format out
 

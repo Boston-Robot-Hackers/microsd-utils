@@ -1,6 +1,6 @@
 ---
-version: "1.0"
-generated: "2026-10-19"
+version: "1.1"
+generated: "2026-10-20"
 ---
 
 # session — what every command shares
@@ -24,14 +24,18 @@ class Env:
     elevate: Callable[[], int]
     random_seconds: float
     images: ImageStore
+    registry: Registry
     poll: Poll
     clock: Callable[[], float]
     sleep: Callable[[float], None]
+    now: Callable[[], datetime]
 ```
+
+Two fields came with card identity: **`registry`**, the repo's list of known cards, and **`now`**, the wall clock used to timestamp history entries. `clock` stays monotonic for timeouts; `now` is the calendar time a human reads back later, and injecting it makes history entries exact in tests.
 
 Production builds one in `cli.real_env()`; tests build one in `tests/fakes.make_test_env()` with recording fakes. Because *every* interaction with the world goes through these fields, the tests can assert negatives — "nothing was opened", "nothing was unmounted" — that would otherwise need real hardware to check.
 
-`DiskutilCommands` is a `Protocol` extending `reader.DiskutilQueries` with the two state-changing calls, `unmount_disk` and `eject`. Discovery only needs the queries; only commands get the power to change state.
+`DiskutilCommands` is a `Protocol` extending `reader.DiskutilQueries` with the state-changing calls: `unmount_disk`, `eject`, and for card identity `mount_disk`, `mount` and `erase_fat32`. Discovery only needs the queries; only commands get the power to change state.
 
 ## `preflight`: the gate before any device
 
@@ -64,6 +68,8 @@ Two prompts defend against two different mistakes:
 
 - **"yes"** defends against *reflex* — Enter or `y` typed without reading.
 - **The identifier** defends against *the wrong card* — the user must look at the line that names it.
+
+`is_yes` is the lighter `y/N` used for low-stakes questions (tagging a card, saving a description); erasing never uses it.
 
 ## Progress
 

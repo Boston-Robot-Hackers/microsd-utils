@@ -1,6 +1,6 @@
 ---
-version: "2.0"
-generated: "2026-10-19"
+version: "2.1"
+generated: "2026-10-20"
 ---
 
 # check — the health check, end to end
@@ -22,14 +22,20 @@ flowchart TD
     A[discover card] --> B["preflight: print plan<br/>(+ erase warning if destructive)"]
     B -->|dry run| Z0[exit 0]
     B -->|not root| S[explain, re-run under sudo]
-    B -->|root| C{destructive?}
-    C -- yes --> D{"yes + identifier?"}
+    B -->|root| F[assess freshness]
+    F --> C{destructive?}
+    C -- yes --> I["identify card<br/>(ask label ID if untagged)"]
+    I --> D{"yes + identifier?"}
     D -- no --> Z1[exit 1, nothing written]
-    D -- yes --> F
-    C -- no --> F[assess freshness]
-    F --> P[run passes]
+    D -- yes --> P1[run passes]
+    P1 -->|exception| R[record failure in registry, re-raise]
+    P1 --> V1[grade + report]
+    V1 --> T["retag: erase FAT32 named ID,<br/>write manifest + stress entry"]
+    C -- no --> P[run passes]
     P --> V[grade + report]
 ```
+
+Before the plan, both modes print the card's **ID line** from `peek` (see `17-identity.md`). Read-only mode never writes the manifest; it only reports the ID or says the card is untagged.
 
 `preflight` and `confirmed_erase` live in `session.py` (see `12-session.md`), shared with `backup`, `flash` and `copy`. What's specific to `check` is the plan text, the passes, and the report.
 
@@ -37,6 +43,17 @@ Two ordering choices are load-bearing:
 
 - **Freshness before passes.** Destructive mode unmounts and overwrites the volume; after that there's nothing left to inspect.
 - **Everything that can refuse comes before any device is opened.**
+- **Identify before the erase questions.** The user sees "this is card A1" (or is asked for the label) *before* typing `yes`, which is the moment a mixed-up card gets caught.
+
+### Keeping the card's identity through a wipe
+
+A stress run overwrites every block, manifest included. `run_check` therefore reads the manifest first, and after the verdict `retag` does three things:
+
+1. re-checks the reader, then `erase_fat32(card, ID)` — the card gets a fresh FAT32 volume named after its label;
+2. re-discovers the card, so the new partition is known;
+3. writes the manifest back with two entries, `formatted` and `stress <GRADE>`, and contents `empty`.
+
+If the passes raise (a device error, a pulled card), `stress_passes` records `stress failed: <error>` in the registry and re-raises. The card itself can't be written at that point, but the history isn't lost.
 
 ## The passes
 

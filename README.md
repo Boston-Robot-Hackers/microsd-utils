@@ -26,7 +26,17 @@ make backup NAME=pi-robot      # save the card as images/pi-robot.img.gz
 make flash IMAGE=pi-robot      # write a saved image to the card — ERASES it
 make flash IMAGE=~/Downloads/raspios.img.xz   # or any .img / .img.gz / .img.xz
 make copy NAME=pi-robot        # back up a master card, swap, flash a new card
+
+make card                      # show the card's ID and history; tag it if new
+make cards                     # list every card we know about
 ```
+
+Each card carries a physical label with a 1–4 character ID (e.g. `A1`). The
+card records it, with what's on it and its history, in
+`.microsd_tools/manifest.json` on its FAT partition; the repo keeps a list of
+every card in `.microsd_tools/cards.json` (git-ignored). `stress`, `flash` and
+`copy` read the manifest before overwriting the card and write it back
+afterwards; a card without one is asked for its ID.
 
 Add `DRY_RUN=1` to any of them to see the plan without touching the card.
 Each command shows its plan, then re-runs itself under `sudo` (macOS asks for

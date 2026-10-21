@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # cli — command-line entry point for the microsd tools
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-20
 # Open Source Under MIT license
 """Command-line entry point: `microsd <command>`.
 
@@ -16,14 +16,17 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime
 from functools import partial
 from typing import NoReturn
 
+from microsd_utils.cards import run_card, run_cards
 from microsd_utils.check import run_check
 from microsd_utils.device import open_card
 from microsd_utils.diskutil import Diskutil
 from microsd_utils.images import ImageError, ImageStore, sudo_owner
 from microsd_utils.imaging import run_backup, run_copy, run_flash
+from microsd_utils.manifest import IdentityError, Registry
 from microsd_utils.partitions import PartitionError
 from microsd_utils.random_io import RANDOM_SECONDS
 from microsd_utils.reader import ReaderError, load_fingerprint
@@ -34,6 +37,7 @@ from microsd_utils.transfer import TransferError
 EXPECTED_ERRORS = (
     ReaderError,
     ImageError,
+    IdentityError,
     PartitionError,
     TransferError,
     SwapError,
@@ -73,6 +77,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     copy = add_command(commands, "copy", "Copy a master card to a new card.")
     copy.add_argument("name", help="Name to save the master's image under.")
+    add_command(commands, "card", "Show the card's ID and history; tag it if new.")
+    commands.add_parser("cards", help="List every card in the registry.")
     return parser
 
 
@@ -85,6 +91,7 @@ def elevate() -> NoReturn:
 def real_env() -> Env:
     diskutil = Diskutil()
     fingerprint = load_fingerprint()
+    owner = sudo_owner(os.environ)
     return Env(
         diskutil=diskutil,
         fingerprint=fingerprint,
@@ -95,10 +102,12 @@ def real_env() -> Env:
         is_root=os.geteuid() == 0,
         elevate=elevate,
         random_seconds=RANDOM_SECONDS,
-        images=ImageStore(owner=sudo_owner(os.environ)),
+        images=ImageStore(owner=owner),
+        registry=Registry(owner=owner),
         poll=card_poll(diskutil, fingerprint),
         clock=time.monotonic,
         sleep=time.sleep,
+        now=datetime.now,
     )
 
 
@@ -107,6 +116,8 @@ COMMANDS = {
     "backup": lambda env, args: run_backup(env, args.name, args.is_dry_run),
     "flash": lambda env, args: run_flash(env, args.image, args.is_dry_run),
     "copy": lambda env, args: run_copy(env, args.name, args.is_dry_run),
+    "card": lambda env, args: run_card(env, args.is_dry_run),
+    "cards": lambda env, args: run_cards(env),
 }
 
 

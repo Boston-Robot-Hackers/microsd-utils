@@ -1,6 +1,6 @@
 ---
-version: "2.0"
-generated: "2026-10-19"
+version: "2.1"
+generated: "2026-10-20"
 ---
 
 # cli — the `microsd` command
@@ -20,7 +20,11 @@ microsd check  [--destructive] [--dry-run]
 microsd backup NAME            [--dry-run]
 microsd flash  IMAGE           [--dry-run]
 microsd copy   NAME            [--dry-run]
+microsd card                   [--dry-run]
+microsd cards
 ```
+
+`card` and `cards` (see `18-cards.md`) never open the raw device, so they don't re-run under sudo. `cards` takes no `--dry-run` because it never writes.
 
 **No command takes a disk.** The card is always found by the reader fingerprint; accepting a disk argument would reintroduce exactly the risk the fingerprint removes. `--dry-run` is added to every subcommand by one helper, `add_command`, so it can't be forgotten on a new one. Flags map to boolean names (`dest="is_dry_run"`).
 

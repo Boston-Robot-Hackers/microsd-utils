@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # check — the `microsd check` command: find the card, test it, give a verdict
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-20
 # Open Source Under MIT license
 """Orchestrates a health check of the card in the designated reader.
 
@@ -12,6 +12,11 @@ Destructive mode asks twice for confirmation, unmounts the card, runs random
 4 KB writes (in a scratch region) and reads, then writes a position-dependent
 pattern to every block and reads it all back. The factory-fresh signal is
 taken before any write, from the card as it was inserted.
+
+Both modes show the card's ID. Destructive mode identifies the card before
+the wipe (asking for its label ID if untagged), and afterwards formats it
+FAT32 named after the ID and writes the manifest back with the grade. If the
+passes fail, the failure still goes into the registry.
 
 Run without root, it finds the card and prints the plan (metadata needs no
 root), explains why a password is coming, then re-runs itself under sudo.
@@ -23,6 +28,17 @@ with fakes.
 from collections.abc import Callable
 
 from microsd_utils.freshness import assess
+from microsd_utils.identity import (
+    ASK_HINT,
+    UNTAGGED_HINT,
+    event,
+    id_line,
+    identify,
+    peek,
+    stamp,
+    store,
+)
+from microsd_utils.manifest import Manifest
 from microsd_utils.passes import (
     BYTES_PER_MB,
     PassResult,
@@ -36,7 +52,7 @@ from microsd_utils.random_io import (
     random_read_pass,
     random_write_pass,
 )
-from microsd_utils.reader import CardInfo, discover
+from microsd_utils.reader import CardInfo, discover, recheck
 from microsd_utils.session import (
     EXIT_ERROR,
     EXIT_OK,
@@ -72,8 +88,8 @@ def describe_plan(card: CardInfo, is_destructive: bool) -> str:
         return (
             f"Plan: unmount {card.identifier}, random 4 KB writes and reads, then "
             f"write and verify every block of {card.raw_device} "
-            f"({gigabytes(card.size_bytes)}).\n"
-            f"{erase_warning(card)}"
+            f"({gigabytes(card.size_bytes)}), then format it FAT32 and write "
+            f"its manifest back.\n{erase_warning(card)}"
         )
     size = gigabytes(card.size_bytes)
     return (
@@ -140,18 +156,46 @@ def run_passes(env: Env, card: CardInfo, is_destructive: bool) -> Measurements:
     return Measurements(read, write, random_read, random_write)
 
 
+def stress_passes(env: Env, card: CardInfo, manifest: Manifest) -> Measurements:
+    """Destructive passes; a failure is recorded against the card, then raised."""
+    try:
+        return run_passes(env, card, True)
+    except Exception as error:
+        failed = manifest.with_event(event(env, "stress", f"failed: {error}"))
+        env.registry.record(failed, stamp(env))
+        raise
+
+
+def retag(env: Env, card: CardInfo, manifest: Manifest, grade: Grade) -> None:
+    """Format the wiped card FAT32, named after its ID, and put the manifest
+    back with the result."""
+    recheck(env.diskutil, env.fingerprint, card)
+    env.out(f"Formatting {card.identifier} FAT32 as {manifest.card_id}...")
+    env.diskutil.erase_fat32(card.identifier, manifest.card_id)
+    formatted = discover(env.diskutil, env.fingerprint)
+    result = manifest.with_event(event(env, "formatted", "FAT32"), contents="empty")
+    store(env, formatted, result.with_event(event(env, "stress", grade.name)))
+
+
 def run_check(env: Env, is_destructive: bool, is_dry_run: bool) -> int:
     card = discover(env.diskutil, env.fingerprint)
     env.out(card_line("Card", card))
+    env.out(id_line(peek(env, card), ASK_HINT if is_destructive else UNTAGGED_HINT))
     code = preflight(env, describe_plan(card, is_destructive), is_dry_run)
     if code is not None:
         return code
-    if is_destructive and not confirmed_erase(env, card):
-        env.out("Not confirmed. Nothing written.")
-        return EXIT_ERROR
     # Before the passes: destructive mode unmounts and wipes the volume.
     fresh = assess(card, volume_names(card, env.list_volume))
-    measured = run_passes(env, card, is_destructive)
+    if is_destructive:
+        manifest = identify(env, card)
+        if not confirmed_erase(env, card):
+            env.out("Not confirmed. Nothing written.")
+            return EXIT_ERROR
+        measured = stress_passes(env, card, manifest)
+    else:
+        measured = run_passes(env, card, False)
     verdict = decide(measured, fresh)
     report(env, measured, verdict)
+    if is_destructive:
+        retag(env, card, manifest, verdict.grade)
     return EXIT_RETIRE if verdict.grade is Grade.RETIRE else EXIT_OK

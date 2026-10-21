@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 # fakes — in-memory stand-ins for diskutil and the card, shared by tests
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-20
 # Open Source Under MIT license
 
 import plistlib
 import struct
+from datetime import datetime
 from pathlib import Path
 
 from microsd_utils.images import ImageStore
+from microsd_utils.manifest import Event, Manifest, Registry, write_manifest
 from microsd_utils.reader import load_fingerprint
 from microsd_utils.session import Env
+from microsd_utils.swap import card_poll
 
 FIXTURES = Path(__file__).parent / "fixtures"
+NOW = datetime(2026, 10, 20, 14, 5, 0)
+NOW_TEXT = "2026-10-20T14:05:00"
 
 
 def load_plist(name: str) -> dict:
@@ -22,11 +27,22 @@ def load_plist(name: str) -> dict:
 
 
 class FakeDiskutil:
-    def __init__(self, disk_list: dict, infos: dict[str, dict]):
+    """`volume_dir` stands in for wherever macOS mounts the card's FAT
+    partition; `erased` records (disk, volume name) per erase."""
+
+    def __init__(
+        self,
+        disk_list: dict,
+        infos: dict[str, dict],
+        volume_dir: Path = Path("/nonexistent/volume"),
+    ):
         self.disk_list = disk_list
         self.infos = infos
+        self.volume_dir = volume_dir
         self.unmounted = []
         self.ejected = []
+        self.mounted = []
+        self.erased = []
 
     def list_external_physical(self) -> dict:
         return self.disk_list
@@ -39,6 +55,16 @@ class FakeDiskutil:
 
     def eject(self, identifier: str) -> None:
         self.ejected.append(identifier)
+
+    def mount_disk(self, identifier: str) -> None:
+        self.mounted.append(identifier)
+
+    def mount(self, partition: str) -> str:
+        self.mounted.append(partition)
+        return str(self.volume_dir)
+
+    def erase_fat32(self, identifier: str, volume_name: str) -> None:
+        self.erased.append((identifier, volume_name))
 
 
 class FakeCard:
@@ -104,10 +130,22 @@ class Recorder:
         return "\n".join(self.lines)
 
 
-def make_test_env(recorder, devices, card_bytes, extra_disks=0, **env_fields):
+def tag(volume_dir: Path, card_id: str = "A1") -> Manifest:
+    """Put a manifest for `card_id` on a fake card volume."""
+    manifest = Manifest(card_id, "raspios", (Event(NOW_TEXT, "tagged", ""),))
+    write_manifest(volume_dir, manifest)
+    return manifest
+
+
+def make_test_env(
+    recorder, devices, card_bytes, extra_disks=0, work_dir=None, **env_fields
+):
     """An Env whose reader holds disk4 (the captured card, resized to
-    `card_bytes`); `devices` maps identifiers to FakeCards. `env_fields`
-    override any Env field (is_root, images, poll, ...)."""
+    `card_bytes`); `devices` maps identifiers to FakeCards. The card's FAT
+    volume is `work_dir/volume` and the registry `work_dir/cards.json`; with
+    no `work_dir` they point nowhere, so the card reads as untagged.
+    `env_fields` override any Env field (is_root, images, poll, ...)."""
+    work_dir = work_dir or Path("/nonexistent/work")
     info = load_plist("norelsys-card-info.plist")
     info["Size"] = card_bytes
     disk_list = load_plist("norelsys-card-list.plist")
@@ -126,9 +164,11 @@ def make_test_env(recorder, devices, card_bytes, extra_disks=0, **env_fields):
     def sleep(seconds):
         clock[0] += seconds
 
+    diskutil = FakeDiskutil(disk_list, infos, work_dir / "volume")
+    fingerprint = load_fingerprint()
     fields = {
-        "diskutil": FakeDiskutil(disk_list, infos),
-        "fingerprint": load_fingerprint(),
+        "diskutil": diskutil,
+        "fingerprint": fingerprint,
         "open_device": open_device,
         "list_volume": lambda path: [],
         "ask": recorder.ask,
@@ -137,9 +177,11 @@ def make_test_env(recorder, devices, card_bytes, extra_disks=0, **env_fields):
         "elevate": recorder.elevate,
         "random_seconds": 0.01,
         "images": ImageStore(Path("/nonexistent/images")),
-        "poll": lambda: None,
+        "poll": card_poll(diskutil, fingerprint),
         "clock": lambda: clock[0],
         "sleep": sleep,
+        "registry": Registry(work_dir / "cards.json"),
+        "now": lambda: NOW,
     }
     return Env(**(fields | env_fields))
 

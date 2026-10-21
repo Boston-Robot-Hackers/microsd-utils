@@ -1,6 +1,6 @@
 ---
-version: "1.0"
-generated: "2026-10-19"
+version: "1.1"
+generated: "2026-10-20"
 ---
 
 # imaging — backup, flash and copy
@@ -28,6 +28,7 @@ flowchart TD
     BI --> images["images.py<br/>create, save_info"]
     FO --> transfer2["transfer.py<br/>write_image, verify_card"]
     BI & FO --> device["open_card<br/>(re-check, then open)"]
+    flash & copy --> RM["restore_manifest<br/>(identity.store)"]
 ```
 
 ## The common shape of a command
@@ -38,8 +39,10 @@ Each command follows the same order, and the order is the safety design:
 2. **Discovery** — find the card by fingerprint.
 3. **`preflight`** — print the plan; stop for a dry run; otherwise explain and re-run under sudo.
 4. **Expensive validation** — measure the image, check it fits.
-5. **Confirmation** — erase warning plus "yes" and the identifier, for anything that writes.
-6. **I/O** — through `open_card`, which re-checks the fingerprint first.
+5. **Identification** — `identify` the target card: its manifest, or the label ID typed by the user. (`backup` only `peek`s, and records the ID in the sidecar.)
+6. **Confirmation** — erase warning plus "yes" and the identifier, for anything that writes.
+7. **I/O** — through `open_card`, which re-checks the fingerprint first.
+8. **Restore identity** — after a flash, write the target's own manifest back.
 
 Anything that can refuse does so as early as possible, and always before the step that would make the refusal costly.
 
@@ -54,6 +57,24 @@ def backup_into(env, card, name):
 ```
 
 The device is opened read-only, yet the card is unmounted first. While a FAT volume is mounted, macOS may write to it at any moment (`.fseventsd`, Spotlight indexes). An image taken mid-write could be internally inconsistent; unmounting freezes the card.
+
+## Flash keeps the target's identity
+
+An image carries whatever was on the *source* card's FAT partition — for a backup of a tagged master, that includes the master's manifest. Writing it to another card would give that card the wrong ID. So after verify, `restore_manifest`:
+
+```python
+def restore_manifest(env, card, manifest):
+    env.diskutil.mount_disk(card.identifier)
+    flashed = env.poll()
+    if flashed is None:
+        raise NoCardError(...)
+    store(env, flashed, manifest)
+    env.diskutil.eject(flashed.identifier)
+```
+
+- **`mount_disk` then re-read the card** — the partition table just changed, so the old `CardInfo` is stale. Whether macOS sees the new partitions without reinsertion is *unverified* until the real-card run (TF04.10).
+- **`env.poll()`** rather than `discover` — it is the same "card in the reader now" view `copy` uses for the swap, which keeps the flow testable with a scripted poll.
+- The manifest written is the *target's*, with a `flash` (or `copy`) entry and the image name as contents. A copy can never take the master's ID: `identify` refuses it whether typed or found on the card.
 
 ## Copy: the guided flow
 

@@ -52,6 +52,20 @@ Each tool, or a group of closely related tools, becomes a feature (`F01`, `F02`,
   Only the data up to the end of the last partition is copied, so a slightly
   smaller target card still works; a card smaller than that is refused.
 
+- **Card identity (macOS)**: cards get mixed up, so each one carries a
+  physical label with a 1–4 character ID (letters/digits), and the tools
+  track it:
+  - *on the card*: `.microsd_tools/manifest.json` on its FAT partition — the
+    ID, what we think is on it, and its history (formats, flashes, stress
+    runs, with date and time).
+  - *in the repo*: a git-ignored `.microsd_tools/cards.json` registry of every
+    card we know about.
+  - Commands that overwrite a card (stress, flash, copy) read its manifest
+    first and write it back afterwards with a new history entry; stress
+    reformats the card FAT32 so it has somewhere to put it. A card with no
+    manifest gets its ID from the user. A copied card never inherits the
+    master's ID.
+
 ### Candidate ideas, not confirmed
 
 - List attached removable cards (device, size, label, partitions).

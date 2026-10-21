@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # session — what every microsd command shares: environment, elevation, prompts
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-20
 # Open Source Under MIT license
 """The pieces every command uses.
 
@@ -18,9 +18,11 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 from microsd_utils.images import ImageStore
+from microsd_utils.manifest import Registry
 from microsd_utils.reader import CardInfo, DiskutilQueries, Fingerprint
 from microsd_utils.swap import Poll
 
@@ -39,6 +41,12 @@ class DiskutilCommands(DiskutilQueries, Protocol):
 
     def eject(self, identifier: str) -> None: ...
 
+    def mount_disk(self, identifier: str) -> None: ...
+
+    def mount(self, partition: str) -> str: ...
+
+    def erase_fat32(self, identifier: str, volume_name: str) -> None: ...
+
 
 @dataclass
 class Env:
@@ -52,9 +60,11 @@ class Env:
     elevate: Callable[[], int]
     random_seconds: float
     images: ImageStore
+    registry: Registry
     poll: Poll
     clock: Callable[[], float]
     sleep: Callable[[float], None]
+    now: Callable[[], datetime]
 
     @property
     def wait_timing(self) -> dict:
@@ -109,6 +119,10 @@ def preflight(env: Env, plan: str, is_dry_run: bool) -> int | None:
         env.out(SUDO_NOTE)
         return env.elevate()
     return None
+
+
+def is_yes(answer: str) -> bool:
+    return answer.strip().lower() in ("y", "yes")
 
 
 def confirmed_erase(env: Env, card: CardInfo) -> bool:

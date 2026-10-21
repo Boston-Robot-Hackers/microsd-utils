@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # images — the image store in the repo's images/ directory
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-20
 # Open Source Under MIT license
 """Card images, kept in `images/` at the repo root (git-ignored).
 
@@ -58,6 +58,7 @@ class ImageInfo:
     data_bytes: int
     sha256: str
     created: str
+    source_card_id: str | None
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,14 @@ def sudo_owner(environ: Mapping[str, str]) -> Owner | None:
     if "SUDO_UID" not in environ:
         return None
     return int(environ["SUDO_UID"]), int(environ["SUDO_GID"])
+
+
+def give_to_owner(
+    path: Path, owner: Owner | None, chown: Callable[[Path, int, int], None]
+) -> None:
+    """Hand a file made as root back to the sudo user; no-op without sudo."""
+    if owner is not None:
+        chown(path, *owner)
 
 
 IMAGE_OPENERS = {
@@ -135,8 +144,7 @@ class ImageStore:
             raise ImageError(f"image {name!r} already exists in {self.directory}")
 
     def give_to_owner(self, path: Path) -> None:
-        if self.owner is not None:
-            self.chown(path, *self.owner)
+        give_to_owner(path, self.owner, self.chown)
 
     @contextmanager
     def create(self, name: str) -> Iterator[BinaryIO]:

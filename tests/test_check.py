@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # test_check — tests for the `microsd check` flow, with every side effect faked
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-20
 # Open Source Under MIT license
 
 import pytest
@@ -16,21 +16,35 @@ from microsd_utils.check import (
     run_check,
     volume_names,
 )
+from microsd_utils.manifest import read_manifest
 from microsd_utils.passes import CHUNK_BYTES
 from microsd_utils.reader import ReaderError, parse_card
 from microsd_utils.verdict import Grade, Verdict
-from tests.fakes import FakeCard, Recorder, load_plist, make_test_env
+from tests.fakes import FakeCard, Recorder, load_plist, make_test_env, tag
 
 CARD_BYTES = 3 * CHUNK_BYTES
 
 
-def make_env(recorder, card, is_root=True, extra_disks=0):
-    return make_test_env(
-        recorder, {"disk4": card}, CARD_BYTES, is_root=is_root, extra_disks=extra_disks
-    )
+@pytest.fixture
+def make_env(tmp_path):
+    """Env factory whose card is tagged A1, so stress asks no ID question."""
+    (tmp_path / "volume").mkdir()
+    tag(tmp_path / "volume")
+
+    def build(recorder, card, is_root=True, extra_disks=0):
+        return make_test_env(
+            recorder,
+            {"disk4": card},
+            CARD_BYTES,
+            is_root=is_root,
+            extra_disks=extra_disks,
+            work_dir=tmp_path,
+        )
+
+    return build
 
 
-def test_read_only_check_reads_and_never_writes():
+def test_read_only_check_reads_and_never_writes(make_env):
     recorder, card = Recorder(), FakeCard(CARD_BYTES)
     env = make_env(recorder, card)
     assert run_check(env, is_destructive=False, is_dry_run=False) == EXIT_OK
@@ -42,7 +56,7 @@ def test_read_only_check_reads_and_never_writes():
     assert ", write" not in recorder.text
 
 
-def test_destructive_check_with_confirmation():
+def test_destructive_check_with_confirmation(make_env):
     recorder, card = Recorder(answers=["yes\n", "disk4\n"]), FakeCard(CARD_BYTES)
     env = make_env(recorder, card)
     assert run_check(env, is_destructive=True, is_dry_run=False) == EXIT_OK
@@ -65,7 +79,7 @@ def test_destructive_check_with_confirmation():
         ["yes", "/dev/disk4"],
     ],
 )
-def test_wrong_confirmation_writes_nothing(answers):
+def test_wrong_confirmation_writes_nothing(answers, make_env):
     recorder, card = Recorder(answers=answers), FakeCard(CARD_BYTES)
     env = make_env(recorder, card)
     assert run_check(env, is_destructive=True, is_dry_run=False) == EXIT_ERROR
@@ -75,7 +89,7 @@ def test_wrong_confirmation_writes_nothing(answers):
 
 
 @pytest.mark.parametrize("is_destructive", [False, True])
-def test_dry_run_touches_nothing(is_destructive):
+def test_dry_run_touches_nothing(is_destructive, make_env):
     recorder = Recorder()
     env = make_env(recorder, FakeCard(CARD_BYTES), is_root=False)
     assert run_check(env, is_destructive, is_dry_run=True) == EXIT_OK
@@ -85,7 +99,7 @@ def test_dry_run_touches_nothing(is_destructive):
 
 
 @pytest.mark.parametrize("is_destructive", [False, True])
-def test_not_root_explains_then_elevates_before_io(is_destructive):
+def test_not_root_explains_then_elevates_before_io(is_destructive, make_env):
     recorder = Recorder()
     env = make_env(recorder, FakeCard(CARD_BYTES), is_root=False)
     run_check(env, is_destructive, is_dry_run=False)
@@ -96,7 +110,7 @@ def test_not_root_explains_then_elevates_before_io(is_destructive):
     assert recorder.text.index("Plan:") < explained < recorder.text.index("<sudo>")
 
 
-def test_two_readers_are_refused():
+def test_two_readers_are_refused(make_env):
     recorder = Recorder()
     env = make_env(recorder, FakeCard(CARD_BYTES), extra_disks=1)
     with pytest.raises(ReaderError, match="Several disks"):
@@ -104,7 +118,7 @@ def test_two_readers_are_refused():
     assert recorder.opened == []
 
 
-def test_bad_card_is_retired():
+def test_bad_card_is_retired(make_env):
     recorder = Recorder(answers=["yes", "disk4"])
     card = FakeCard(CARD_BYTES, corrupt_offset=CHUNK_BYTES)
     env = make_env(recorder, card)
@@ -143,17 +157,17 @@ def test_progress_prints_each_percent_once():
     ]
 
 
-def test_erase_warning_comes_before_both_questions():
+def test_erase_warning_comes_before_both_questions(make_env):
     recorder = Recorder(answers=["yes", "disk4"])
     env = make_env(recorder, FakeCard(CARD_BYTES))
     run_check(env, is_destructive=True, is_dry_run=False)
-    assert "WARNING: EVERYTHING ON THIS CARD WILL BE ERASED." in recorder.lines[1]
+    assert "WARNING: EVERYTHING ON THIS CARD WILL BE ERASED." in recorder.lines[2]
     assert "ARE YOU SURE" in recorder.prompts[0]
     assert "disk4" in recorder.prompts[1]
 
 
 @pytest.mark.parametrize("is_dry_run", [False, True])
-def test_erase_warning_shown_before_sudo_and_in_dry_run(is_dry_run):
+def test_erase_warning_shown_before_sudo_and_in_dry_run(is_dry_run, make_env):
     recorder = Recorder()
     env = make_env(recorder, FakeCard(CARD_BYTES), is_root=False)
     run_check(env, is_destructive=True, is_dry_run=is_dry_run)
@@ -161,13 +175,13 @@ def test_erase_warning_shown_before_sudo_and_in_dry_run(is_dry_run):
     assert recorder.prompts == []
 
 
-def test_no_erase_warning_for_read_only():
+def test_no_erase_warning_for_read_only(make_env):
     recorder = Recorder()
     run_check(make_env(recorder, FakeCard(CARD_BYTES)), False, False)
     assert "ERASED" not in recorder.text
 
 
-def test_destructive_pass_order_and_random_writes_in_scratch(monkeypatch):
+def test_destructive_pass_order_and_random_writes_in_scratch(monkeypatch, make_env):
     monkeypatch.setattr("microsd_utils.check.SCRATCH_BYTES", CHUNK_BYTES)
     recorder, card = Recorder(answers=["yes", "disk4"]), FakeCard(CARD_BYTES)
     run_check(make_env(recorder, card), is_destructive=True, is_dry_run=False)
@@ -184,7 +198,7 @@ def test_destructive_pass_order_and_random_writes_in_scratch(monkeypatch):
     )
 
 
-def test_destructive_report_has_both_random_directions():
+def test_destructive_report_has_both_random_directions(make_env):
     recorder, card = Recorder(answers=["yes", "disk4"]), FakeCard(CARD_BYTES)
     run_check(make_env(recorder, card), is_destructive=True, is_dry_run=False)
     assert "IOPS (A2), write" in recorder.text
@@ -201,7 +215,7 @@ def test_destructive_report_has_both_random_directions():
         (Grade.RETIRE, EXIT_RETIRE),
     ],
 )
-def test_exit_code_and_verdict_line_per_grade(monkeypatch, grade, exit_code):
+def test_exit_code_and_verdict_line_per_grade(monkeypatch, grade, exit_code, make_env):
     monkeypatch.setattr(
         "microsd_utils.check.decide",
         lambda measured, fresh: Verdict(grade, ["why"], False, True),
@@ -211,3 +225,71 @@ def test_exit_code_and_verdict_line_per_grade(monkeypatch, grade, exit_code):
     assert run_check(env, is_destructive=True, is_dry_run=False) == exit_code
     assert f"Verdict: {grade.name}" in recorder.lines
     assert "Looks brand new" in recorder.lines
+
+
+def test_read_only_check_shows_card_id_and_writes_no_manifest(make_env, tmp_path):
+    recorder = Recorder()
+    env = make_env(recorder, FakeCard(CARD_BYTES))
+    run_check(env, is_destructive=False, is_dry_run=False)
+    assert "Card ID: A1  raspios" in recorder.lines
+    assert env.diskutil.erased == []
+    assert len(read_manifest(tmp_path / "volume").history) == 1
+
+
+def test_read_only_check_untagged_card_points_to_make_card():
+    recorder = Recorder()
+    env = make_test_env(recorder, {"disk4": FakeCard(CARD_BYTES)}, CARD_BYTES)
+    run_check(env, is_destructive=False, is_dry_run=False)
+    assert "Card ID: untagged; run `make card` to tag it" in recorder.lines
+    assert recorder.prompts == []
+
+
+def test_stress_reformats_and_writes_manifest_back(make_env, tmp_path):
+    recorder = Recorder(answers=["yes", "disk4"])
+    env = make_env(recorder, FakeCard(CARD_BYTES))
+    run_check(env, is_destructive=True, is_dry_run=False)
+    assert env.diskutil.erased == [("disk4", "A1")]
+    manifest = read_manifest(tmp_path / "volume")
+    assert manifest.contents == "empty"
+    assert [(e.event, e.detail) for e in manifest.history[1:]] == [
+        ("formatted", "FAT32"),
+        ("stress", "EXCELLENT"),
+    ]
+    assert env.registry.lookup("A1") == manifest
+    assert recorder.text.index("Verdict") < recorder.text.index("Manifest written")
+
+
+def test_stress_untagged_card_asks_id_before_erase_questions(tmp_path):
+    (tmp_path / "volume").mkdir()
+    recorder = Recorder(answers=["c3", "", "yes", "disk4"])
+    env = make_test_env(
+        recorder, {"disk4": FakeCard(CARD_BYTES)}, CARD_BYTES, work_dir=tmp_path
+    )
+    assert run_check(env, is_destructive=True, is_dry_run=False) == EXIT_OK
+    assert "label" in recorder.prompts[0]
+    assert "ARE YOU SURE" in recorder.prompts[2]
+    assert env.diskutil.erased == [("disk4", "C3")]
+    assert read_manifest(tmp_path / "volume").card_id == "C3"
+
+
+def test_stress_failure_is_recorded_in_registry(make_env, monkeypatch):
+    def broken(env, card, is_destructive):
+        raise OSError("I/O error")
+
+    monkeypatch.setattr("microsd_utils.check.run_passes", broken)
+    recorder = Recorder(answers=["yes", "disk4"])
+    env = make_env(recorder, FakeCard(CARD_BYTES))
+    with pytest.raises(OSError):
+        run_check(env, is_destructive=True, is_dry_run=False)
+    last = env.registry.lookup("A1").history[-1]
+    assert (last.event, last.detail) == ("stress", "failed: I/O error")
+    assert env.diskutil.erased == []
+
+
+def test_stress_dry_run_shows_reformat_and_card_id(make_env):
+    recorder = Recorder()
+    env = make_env(recorder, FakeCard(CARD_BYTES), is_root=False)
+    run_check(env, is_destructive=True, is_dry_run=True)
+    assert "format it FAT32" in recorder.text
+    assert "Card ID: A1  raspios" in recorder.lines
+    assert env.diskutil.erased == []

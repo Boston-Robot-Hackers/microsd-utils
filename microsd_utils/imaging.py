@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # imaging — the backup, flash and copy commands
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-20
 # Open Source Under MIT license
 """`microsd backup`, `flash` and `copy`, all on the card in the designated reader.
 
@@ -14,6 +14,11 @@
 - **copy NAME**: back up the master card, have the user swap it for a new
   card in the same reader, then flash and verify the new card.
 
+Flash and copy identify the target card before writing (asking for its label
+ID if untagged) and write its own manifest back into the new FAT partition
+afterwards, so the card keeps its ID and history. A copy never takes the
+master's ID. Backup only reads: it records the master's ID in the sidecar.
+
 Every command shows its plan and re-runs itself under sudo before touching a
 device. Anything that overwrites a card first shows the erase warning and
 asks for "yes" and the card's identifier. In `copy`, the master stays
@@ -22,10 +27,21 @@ physically pulled; only then is a new card accepted.
 """
 
 from datetime import date
+from pathlib import Path
 
+from microsd_utils.identity import (
+    ASK_HINT,
+    UNTAGGED_HINT,
+    event,
+    id_line,
+    identify,
+    peek,
+    store,
+)
 from microsd_utils.images import ImageInfo, ImageSource
+from microsd_utils.manifest import Manifest
 from microsd_utils.passes import BYTES_PER_MB, PassResult
-from microsd_utils.reader import CardInfo, discover
+from microsd_utils.reader import CardInfo, NoCardError, discover
 from microsd_utils.session import (
     EXIT_ERROR,
     EXIT_OK,
@@ -54,7 +70,7 @@ def timing_line(label: str, timing: PassResult) -> str:
     )
 
 
-def backup_into(env: Env, card: CardInfo, name: str) -> ImageInfo:
+def backup_into(env: Env, card: CardInfo, name: str, card_id: str | None) -> ImageInfo:
     env.diskutil.unmount_disk(card.identifier)
     with env.open_device(card, False) as device:
         length = copy_length(device.read_at, card.size_bytes, card.block_size_bytes)
@@ -69,6 +85,7 @@ def backup_into(env: Env, card: CardInfo, name: str) -> ImageInfo:
         data_bytes=length,
         sha256=sha256,
         created=date.today().isoformat(),
+        source_card_id=card_id,
     )
     env.images.save_info(info)
     env.out(timing_line("Backup ", timing))
@@ -83,16 +100,32 @@ def flash_onto(env: Env, card: CardInfo, source: ImageSource) -> None:
         on_verify = progress_printer("Verify", env.out)
         written = write_image(device.write_at, source, on_write)
         verified = verify_card(device.read_at, source, on_verify)
-    env.diskutil.eject(card.identifier)
     env.out(timing_line("Flash  ", written))
     env.out(timing_line("Verify ", verified))
-    env.out("Verified: OK. The card has been ejected.")
+    env.out("Verified: OK.")
+
+
+def restore_manifest(env: Env, card: CardInfo, manifest: Manifest) -> None:
+    """After a flash: have macOS mount the new partitions, put the target's
+    manifest back, eject."""
+    env.diskutil.mount_disk(card.identifier)
+    flashed = env.poll()
+    if flashed is None:
+        raise NoCardError(
+            f"the card was removed before {manifest.card_id}'s manifest was "
+            "written; put it back and run `make card`"
+        )
+    store(env, flashed, manifest)
+    env.diskutil.eject(flashed.identifier)
+    env.out("The card has been ejected.")
 
 
 def run_backup(env: Env, name: str, is_dry_run: bool) -> int:
     env.images.check_new_name(name)
     card = discover(env.diskutil, env.fingerprint)
     env.out(card_line("Card", card))
+    manifest = peek(env, card)
+    env.out(id_line(manifest, UNTAGGED_HINT))
     plan = (
         f"Plan: unmount {card.identifier} and copy its partitions into "
         f"{env.images.image_path(name)}. The card is only read."
@@ -100,7 +133,7 @@ def run_backup(env: Env, name: str, is_dry_run: bool) -> int:
     code = preflight(env, plan, is_dry_run)
     if code is not None:
         return code
-    backup_into(env, card, name)
+    backup_into(env, card, name, manifest.card_id if manifest else None)
     return EXIT_OK
 
 
@@ -108,19 +141,24 @@ def run_flash(env: Env, image: str, is_dry_run: bool) -> int:
     path = env.images.locate(image)
     card = discover(env.diskutil, env.fingerprint)
     env.out(card_line("Card", card))
+    env.out(id_line(peek(env, card), ASK_HINT))
     plan = (
         f"Plan: write {path} to {card.raw_device}, read it back to verify, "
-        f"then eject the card.\n{erase_warning(card)}"
+        f"write the card's manifest back, then eject it.\n{erase_warning(card)}"
     )
     code = preflight(env, plan, is_dry_run)
     if code is not None:
         return code
     source = env.images.find(image)
     check_fits(source, card.size_bytes, card.block_size_bytes)
+    manifest = identify(env, card)
     if not confirmed_erase(env, card):
         env.out("Not confirmed. Nothing written.")
         return EXIT_ERROR
     flash_onto(env, card, source)
+    image_name = Path(image).name
+    flashed = manifest.with_event(event(env, "flash", image_name), image_name)
+    restore_manifest(env, card, flashed)
     return EXIT_OK
 
 
@@ -162,14 +200,20 @@ def run_copy(env: Env, name: str, is_dry_run: bool) -> int:
     if code is not None:
         return code
     master = take_master(env)
-    backup_into(env, master, name)
+    master_manifest = peek(env, master)
+    env.out(id_line(master_manifest, "untagged"))
+    master_id = master_manifest.card_id if master_manifest else None
+    backup_into(env, master, name, master_id)
     card = take_new_card(env, master)
     source = env.images.find(name)
     check_fits(source, card.size_bytes, card.block_size_bytes)
+    manifest = identify(env, card, forbidden_id=master_id)
     env.out(erase_warning(card))
     if not confirmed_erase(env, card):
         env.out(f"Not confirmed. Nothing written; the image is saved as {name}.")
         return EXIT_ERROR
     flash_onto(env, card, source)
+    detail = f"from {master_id or 'an untagged master'} via image {name}"
+    restore_manifest(env, card, manifest.with_event(event(env, "copy", detail), name))
     env.out("Copy complete.")
     return EXIT_OK

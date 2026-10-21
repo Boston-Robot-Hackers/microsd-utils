@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # test_images — tests for the image store
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-20
 # Open Source Under MIT license
 
 import gzip
@@ -38,6 +38,7 @@ def info_for(name, data=DATA):
         data_bytes=len(data),
         sha256=hashlib.sha256(data).hexdigest(),
         created="2026-10-19",
+        source_card_id="A1",
     )
 
 

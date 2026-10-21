@@ -41,3 +41,10 @@
 - **Makefile rule**: `run.bash` removed. The kit (style guide, Makefile/CLAUDE/
   README templates, bootstrap) now requires a Makefile with `make help` holding
   only user commands; dev commands run via `uv`. Same change in j3.
+
+- **F04 code**: card identity. `manifest.py` (ID, manifest, registry),
+  `identity.py` (peek / identify / store on the card's FAT volume),
+  `cards.py` (`make card`, `make cards`). Stress reformats FAT32 named after
+  the ID and writes the manifest back; flash and copy restore the target's own
+  manifest; backup records the source card ID in the sidecar. Literate docs
+  16–18 added, 02/09/12–15 updated.
