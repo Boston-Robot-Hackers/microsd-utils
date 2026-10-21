@@ -32,3 +32,12 @@
   identifiers and mount points, so it could never fire; now compares layout.
 
 - **Literate docs**: `process/01-literate/01`–`15` plus `X01`.
+
+## 2026-10-20
+
+- **Repo rename**: GitHub repo is now `Boston-Robot-Hackers/microsd-utils`;
+  remote and README clone URL updated.
+
+- **Makefile rule**: `run.bash` removed. The kit (style guide, Makefile/CLAUDE/
+  README templates, bootstrap) now requires a Makefile with `make help` holding
+  only user commands; dev commands run via `uv`. Same change in j3.

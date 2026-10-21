@@ -1,57 +1,16 @@
-# Makefile — dev commands for <APP NAME>
+# Makefile — commands for using <APP NAME>
 #
-# fmt/lint only touch files changed in the working tree (staged, unstaged, or
-# new/untracked) -- never the whole repo. Introducing or tightening a linter
-# partway through a project's life should never force a mass reformat of code
-# nobody asked to touch; scope it to what you're actually working on.
+# Only tool targets live here: what a user of the app runs. Development
+# commands (sync, tests, ruff) run through `uv` directly; see CLAUDE.md.
 
-CHANGED_PY := $(shell { \
-	git diff --name-only --diff-filter=ACMR -- '*.py'; \
-	git diff --cached --name-only --diff-filter=ACMR -- '*.py'; \
-	git ls-files --others --exclude-standard -- '*.py'; \
-} | sort -u)
-
-.PHONY: help setup fmt lint test ci run
+.PHONY: help
 
 .DEFAULT_GOAL := help
 
-# `make help` lists every target that has a `## description`, grouped under
-# the `##@` section headers. Tool targets (what a user of the app runs) come
-# first; development targets after.
-
-##@ Tool
-
-# Add user-facing targets here as features land, e.g.
-#   validate: ## Check a card (DISK=disk4)
-
-##@ Development
-
 help: ## List targets
 	@awk 'BEGIN {FS = ":.*## "} \
-		/^##@/ {printf "\n%s\n", substr($$0, 5)} \
 		/^[a-zA-Z_-]+:.*## / {printf "  %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-setup: ## Install dependencies (uv sync)
-	uv sync
-
-fmt: ## Format changed .py files with ruff
-	@if [ -z "$(CHANGED_PY)" ]; then \
-		echo "fmt: no changed .py files"; \
-	else \
-		uv run ruff format $(CHANGED_PY); \
-	fi
-
-lint: ## Lint changed .py files with ruff
-	@if [ -z "$(CHANGED_PY)" ]; then \
-		echo "lint: no changed .py files"; \
-	else \
-		uv run ruff check $(CHANGED_PY); \
-	fi
-
-test: ## Run the test suite
-	uv run pytest
-
-ci: fmt lint test ## fmt + lint + test
-
-run: ## Run the app
-	./run.bash
+# Add user-facing targets here as features land, each with a `## description`:
+#   validate: ## Check a card
+#   	uv run <app> check

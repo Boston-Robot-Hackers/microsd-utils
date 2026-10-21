@@ -197,14 +197,19 @@ Applies to any project with a UI layer (Streamlit, Flask, Dash, etc.).
 
 ## Makefile
 
-- Write a Makefile for each project.
-- `make help` is the default target and gives a short list of targets.
-- **The Makefile is primarily for the user of the tool.** User-facing targets
-  (e.g. `validate`, `copy`, `deploy`, `reset`) come first, under `##@ Tool`;
-  development targets (`setup`, `fmt`, `lint`, `test`, `ci`) follow under
-  `##@ Development`.
-- Every target `make help` should show carries a `## description` comment on
-  its rule line; that is what `help` lists.
+**MUST**
+- Every project has a Makefile, with `make help` as the default target giving
+  a short list of targets.
+- **The Makefile is for the user of the tool only.** It holds the commands a
+  user runs (e.g. `validate`, `copy`, `deploy`, `reset`) — never development or
+  build commands (`setup`, `fmt`, `lint`, `test`). Those run through `uv`
+  directly and are documented in `CLAUDE.md`'s `## Commands`.
+- No `run.bash` or other wrapper script for running the app; a Makefile target
+  is the entry point.
+- Every target carries a `## description` comment on its rule line; that is
+  what `help` lists.
+
+**SHOULD**
 - Add a feature's user-facing targets as part of that feature's task list, not
   as placeholders ahead of time.
 - Specific targets vary from project to project; the template shows the layout.

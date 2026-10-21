@@ -5,7 +5,7 @@ Command-line tools for checking, backing up and copying microSD cards on macOS.
 ## Installation
 
 ```bash
-git clone git@github.com:Boston-Robot-Hackers/micros-utils.git
+git clone git@github.com:Boston-Robot-Hackers/microsd-utils.git
 cd microsd-utils
 uv sync
 ```

@@ -19,7 +19,3 @@
   `usb-drd2-port-ss@02200000` may be touched (fingerprint in `sd_reader.json`).
   Ask before running any disk command; never query other disks to build
   fixtures.
-
-- **Unanswered**: git remote is `micros-utils`, folder is `microsd-utils`; the
-  README's `cd microsd-utils` breaks for a fresh clone. `run.bash` is now
-  unused.

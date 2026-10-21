@@ -33,7 +33,6 @@ process/
     closed/
     deferred/
     template.md
-run.bash
 ```
 ### LICENSE
 Copy from `.claude/templates/LICENSE.template` and replace `<YEAR>` and `<AUTHOR NAME>`.
@@ -57,13 +56,10 @@ Copy from `.claude/templates/CLAUDE.md.template` and replace `<APP NAME>`.
 
 ### Makefile
 Copy from `.claude/templates/Makefile.template` and replace `<APP NAME>` in
-the header comment. Provides `make setup|fmt|lint|test|check|run` as the
-standard entrypoints — `setup` runs `uv sync`, `test` runs `uv run pytest`,
-`fmt`/`lint` run `uv run ruff` scoped to changed files only (see the
-template's own header for why), `check` is `fmt`+`lint`+`test`, and `run`
-execs `./run.bash`. README.md.template and CLAUDE.md.template both point
-here rather than spelling out raw commands, so this is the one place the
-actual invocations live.
+the header comment. It starts with only `help` (the default target); user-facing
+tool targets are added as features land. Development commands (`uv sync`,
+`uv run pytest`, `uv run ruff`) do not go in the Makefile — they are listed in
+CLAUDE.md's `## Commands`. See the Makefile rules in `.claude/style_guide.md`.
 
 ### .githooks/pre-commit
 Copy from `.claude/templates/pre-commit.template` as-is, then
@@ -74,9 +70,6 @@ the header of every staged `.py`, as required by the file-header rule in
 Git will not use it until the repo is pointed at the directory — see step 1 of
 "After scaffolding". `.git/hooks` is not version controlled, which is why the
 hook is tracked here instead.
-
-### run.bash
-Executable shell script containing the app's run command; set executable with `chmod +x run.bash`.
 
 ## After scaffolding
 
@@ -101,6 +94,6 @@ Prompt the user to:
 6. Replace `<APP NAME>` in `CLAUDE.md`, `README.md`, `Makefile`, and `LICENSE`
    with the actual app name, author, and year
 7. Fill in `settings.json`'s `autoMode.environment` block with the real project
-   purpose, package manager, the `make test`/`make run` commands, and source
+   purpose, package manager, the `uv run pytest` / `make help` commands, and source
    control location
 8. Define the first feature and matching task file before writing any code
