@@ -28,7 +28,7 @@ make flash IMAGE=~/Downloads/raspios.img.xz   # or any .img / .img.gz / .img.xz
 make copy NAME=pi-robot        # back up a master card, swap, flash a new card
 
 make card                      # show the card's ID and history; tag it if new
-make cards                     # list every card we know about
+make history                   # list every card we know about, with its last event
 ```
 
 Each card carries a physical label with a 1–4 character ID (e.g. `A1`). The

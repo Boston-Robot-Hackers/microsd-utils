@@ -1,6 +1,6 @@
 ---
-version: "2.2"
-generated: "2026-10-21"
+version: "2.3"
+generated: "2026-10-22"
 ---
 
 # check — the health check, end to end
@@ -57,7 +57,7 @@ A stress run overwrites every block, manifest included. `run_check` therefore re
 
 **Why the verdict comes first.** Formatting talks to the card again, and a failing card can hang it. Originally the verdict was only saved at the very end, inside `retag`, so a hung format (card R3) lost a 35-minute result. Now the history reads `stress` → `formatted`, and a format that raises or times out adds `formatted failed: <error>` before re-raising.
 
-All three registry writes go through one helper:
+All three registry writes go through one helper, `identity.record_event` — shared with `flash` and `copy`, which record their own failures the same way (`14-imaging.md`):
 
 ```python
 def record_event(env, manifest, kind, detail, contents=None) -> Manifest:

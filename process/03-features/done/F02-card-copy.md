@@ -4,10 +4,10 @@ Feature file name must be `FNN-<slug>.md` where `NN` matches the feature number.
 # F02 — Back up, flash and copy microSD cards on macOS
 **Priority**: High
 **Date Created:** 2026-10-18
-**Done:** no
+**Done:** yes
 **Tasks File Created:** yes
 **Tests Written:** yes
-**Test Passing:** no
+**Test Passing:** yes
 **Description**: Three commands sharing one image store on the Mac:
 
 - **`microsd backup <name>`**: read the card into a compressed image

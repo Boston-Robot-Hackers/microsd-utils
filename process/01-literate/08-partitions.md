@@ -1,6 +1,6 @@
 ---
-version: "1.0"
-generated: "2026-10-19"
+version: "1.1"
+generated: "2026-10-22"
 ---
 
 # partitions — where does the data end?
@@ -58,8 +58,37 @@ A blank card (or one wiped by `make stress`) has no table, and copying it whole 
 
 Backup reads the first **1 MiB** of the card before parsing. That covers the MBR, the GPT header, and the standard 128 × 128-byte GPT entry array (16 KiB starting at block 2). If a GPT's entry array claims to extend beyond what was read, that's reported rather than silently truncated.
 
+## Naming regions of a card
+
+`verify` needs the opposite question: not where the data *ends*, but which partition a given byte belongs to. `regions` answers it from the image's own MBR:
+
+```python
+def region_of(entries, offset, block_bytes) -> Region:
+    for number, (part_type, start_lba, sectors) in enumerate(entries, 1):
+        if start_lba * block_bytes <= offset < (start_lba + sectors) * block_bytes:
+            return Region(f"partition {number} ({TYPE_NAMES...})", part_type in FAT_TYPES)
+    ...  # before the first partition: "partition table"; else "outside any partition"
+```
+
+`Region` is a frozen dataclass, so it can be a `Counter` key. Each differing chunk arrives as a *span* — its first and last differing byte — and counts once in each region those two bytes fall in:
+
+```python
+for first, last in spans:
+    # dict.fromkeys, not a set: drops a repeat but keeps first-byte order.
+    touched = dict.fromkeys([region_of(..., first, ...), region_of(..., last, ...)])
+    counts.update(list(touched))
+```
+
+Two details earned their comments the hard way:
+
+- **Not a set.** A set of two `Region`s iterates in hash order, and string hashes are randomized per process, so the report's lines came out in a different order from run to run — a flaky test. `dict.fromkeys` de-duplicates and keeps insertion order.
+- **A list, not the dict.** `Counter.update` treats a mapping as *counts to add*, so passing the dict (whose values are all `None`) breaks; passing its keys as a list counts each once.
+
+`FAT_TYPES` (0x01, 0x04, 0x06, 0x0B, 0x0C, 0x0E) marks a region as FAT, which is what lets `verify` say "all differences are in the FAT boot partition".
+
 ## Observations and possible improvements
 
 1. **"Superfloppy" FAT volumes.** A FAT filesystem written directly at sector 0 (no partition table) also ends in `0x55AA`. Its boot code would be misread as partition entries; the result is almost certainly a "past the card" refusal rather than a wrong copy, but detecting a FAT boot sector (`0xEB` jump, `FAT` string) and copying the whole card would be friendlier.
 2. **The GPT backup header is not copied.** GPT keeps a second copy of the table in the disk's last blocks; copying only to the last partition drops it. Linux repairs this silently; macOS may warn. Pi OS uses MBR, so this only matters for GPT cards.
 3. **Sector size is the card's block size.** MBR sector numbers are in logical blocks; every microSD card reports 512, but the code takes the block size as a parameter rather than assuming it.
+4. **`regions` reads MBR only.** On a GPT card every difference lands in "partition 1 (GPT)", the protective entry; naming GPT partitions would need the entry array, as `gpt_end_block` already reads.

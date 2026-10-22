@@ -1,6 +1,6 @@
 ---
-version: "2.2"
-generated: "2026-10-21"
+version: "2.3"
+generated: "2026-10-22"
 ---
 
 # cli — the `microsd` command
@@ -19,12 +19,13 @@ generated: "2026-10-21"
 microsd check  [--destructive] [--dry-run]
 microsd backup NAME            [--dry-run]
 microsd flash  IMAGE           [--dry-run]
+microsd verify IMAGE           [--dry-run]
 microsd copy   NAME            [--dry-run]
 microsd card                   [--dry-run]
-microsd cards
+microsd history
 ```
 
-`card` and `cards` (see `18-cards.md`) never open the raw device, so they don't re-run under sudo. `cards` takes no `--dry-run` because it never writes.
+`card` and `history` (see `18-cards.md`) never open the raw device, so they don't re-run under sudo. `history` takes no `--dry-run` because it never writes. `flash` and `verify` share one help string for their `IMAGE` argument (`IMAGE_HELP`).
 
 **No command takes a disk.** The card is always found by the reader fingerprint; accepting a disk argument would reintroduce exactly the risk the fingerprint removes. `--dry-run` is added to every subcommand by one helper, `add_command`, so it can't be forgotten on a new one. Flags map to boolean names (`dest="is_dry_run"`).
 
@@ -37,7 +38,10 @@ COMMANDS = {
     "check": lambda env, args: run_check(env, args.is_destructive, args.is_dry_run),
     "backup": lambda env, args: run_backup(env, args.name, args.is_dry_run),
     "flash": lambda env, args: run_flash(env, args.image, args.is_dry_run),
+    "verify": lambda env, args: run_verify(env, args.image, args.is_dry_run),
     "copy": lambda env, args: run_copy(env, args.name, args.is_dry_run),
+    "card": lambda env, args: run_card(env, args.is_dry_run),
+    "history": lambda env, args: run_history(env),
 }
 ```
 
@@ -53,7 +57,6 @@ return Env(
     ...
     images=ImageStore(owner=sudo_owner(os.environ)),
     poll=card_poll(diskutil, fingerprint),
-    clock=time.monotonic,
     sleep=time.sleep,
 )
 ```
@@ -81,17 +84,17 @@ EXPECTED_ERRORS = (
     IdentityError,
     PartitionError,
     TransferError,
-    SwapError,
     CardDisconnected,
     OSError,
     subprocess.CalledProcessError,
 )
 ```
 
-Each module raises its own exception type for failures a user can act on — no card, bad image name, corrupt partition table, verification failed, swap timed out, card disconnected mid-pass. A `diskutil` command that times out raises `DiskutilTimeout`, an `OSError`, so it needs no entry of its own. These become a one-line `microsd: …` message and exit code 1. Anything else is a bug and keeps its full traceback.
+Each module raises its own exception type for failures a user can act on — no card, bad image name, corrupt partition table, verification failed, card disconnected mid-pass. (There was a `SwapError` for a card swap that took too long; the swap now waits until the user presses Ctrl-C. `KeyboardInterrupt` isn't caught here, so Ctrl-C still prints Python's traceback.) A `diskutil` command that times out raises `DiskutilTimeout`, an `OSError`, so it needs no entry of its own. These become a one-line `microsd: …` message and exit code 1. Anything else is a bug and keeps its full traceback.
 
 ## Observations and possible improvements
 
 1. **`--version`** from package metadata would help when comparing reports.
 2. **Exit codes in `--help`.** They're documented in the README only; an `epilog` would put them where script authors look.
-3. **An `images` subcommand** to list stored images from their sidecars would round out the backup/flash workflow.
+3. **An `images` subcommand** to list stored images from their sidecars would round out the backup/flash workflow — `images/` already holds three 12 GB copies of one card.
+4. **Catch `KeyboardInterrupt`** at the boundary and print one line ("Stopped.") instead of a traceback, now that Ctrl-C is the normal way out of a swap wait.

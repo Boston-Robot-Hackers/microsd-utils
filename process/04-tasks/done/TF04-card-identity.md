@@ -116,11 +116,29 @@ master's; same-ID refusal; no-FAT path; dry run.
 **Test**: this task is the tests.
 
 ## TF04.10 — Real-card run
-**Status**: not done
+**Status**: done (2026-10-21)
 **Description**: Manual, on the card in the reader: `make card` to tag it,
-`make stress`, `make card`, `make flash`, `make card`, `make cards`. Check the
+`make stress`, `make card`, `make flash`, `make card`, `make history`. Check the
 **unverified** assumption that macOS sees the new partitions after a raw flash
 without the card being reinserted; if not, the flash step asks the user to
 reinsert it. Record results in `notes.md`.
 
 **Test**: manual (`-m manual`) — needs the real reader and card.
+
+**Results** (2026-10-21, card R2):
+
+- **Tag** (10:18) and **stress** (11:44): stress formatted FAT32 as R2,
+  wrote the manifest back, recorded `stress FAIR`.
+
+- **Flash** `dome-2-master` (20:31): verified OK, `Manifest written: R2`,
+  ejected. **macOS saw the new partitions after the raw flash without
+  reinsertion** — assumption confirmed.
+
+- **`make card`** after the flash, without sudo: read R2's manifest from the
+  flashed `bootfs`, showing the `flash` entry. `diskutil mount` on the
+  already auto-mounted volume succeeded.
+
+- **`make cards`** (now `make history`): lists R2 and R3 with their last events.
+
+- **`make card` writing without sudo**: done by the user on 2026-10-21, who
+  reported F04 done (output not captured).

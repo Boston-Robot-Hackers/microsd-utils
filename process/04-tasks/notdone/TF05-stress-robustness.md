@@ -101,7 +101,7 @@ suite with `uv run pytest`; all pass.
 **Description**: On R2: run `make validate` and pull the card out during the
 read pass; record the errno and that the run stops with "card disconnected".
 If macOS reports a different errno, adjust TF05.3. Then run `make stress` to
-the end and check `make cards` shows `stress` before `formatted`.
+the end and check `make history` shows `stress` before `formatted`.
 
 **Test**: not automatable — needs the real card and a physical unplug.
 Results recorded in `process/02-doc/notes.md`.

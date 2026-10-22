@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # fakes — in-memory stand-ins for diskutil and the card, shared by tests
 # Author: Pito Salas and Claude Code
-# Version: 2
+# Version: 3
 # Created: 2026-10-19
-# Updated: 2026-10-20
+# Updated: 2026-10-22
 # Open Source Under MIT license
 
 import plistlib
@@ -159,10 +159,8 @@ def make_test_env(
         recorder.opened.append((card_info.identifier, is_writable))
         return devices[card_info.identifier]
 
-    clock = [0.0]
-
     def sleep(seconds):
-        clock[0] += seconds
+        pass
 
     diskutil = FakeDiskutil(disk_list, infos, work_dir / "volume")
     fingerprint = load_fingerprint()
@@ -178,7 +176,6 @@ def make_test_env(
         "random_seconds": 0.01,
         "images": ImageStore(Path("/nonexistent/images")),
         "poll": card_poll(diskutil, fingerprint),
-        "clock": lambda: clock[0],
         "sleep": sleep,
         "registry": Registry(work_dir / "cards.json"),
         "now": lambda: NOW,

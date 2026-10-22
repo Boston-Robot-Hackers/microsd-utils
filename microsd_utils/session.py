@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # session — what every microsd command shares: environment, elevation, prompts
 # Author: Pito Salas and Claude Code
-# Version: 3
+# Version: 4
 # Created: 2026-10-19
-# Updated: 2026-10-21
+# Updated: 2026-10-22
 # Open Source Under MIT license
 """The pieces every command uses.
 
 - `Env` carries every side effect (diskutil, device access, prompts, output,
-  clock), so each command's whole flow is tested with fakes.
+  sleep, time of day), so each command's whole flow is tested with fakes.
 - `preflight` prints the plan, stops for a dry run, and otherwise re-runs
   the command under sudo after saying why a password is coming. Commands
   call it before touching any device.
@@ -62,13 +62,8 @@ class Env:
     images: ImageStore
     registry: Registry
     poll: Poll
-    clock: Callable[[], float]
     sleep: Callable[[float], None]
     now: Callable[[], datetime]
-
-    @property
-    def wait_timing(self) -> dict:
-        return {"clock": self.clock, "sleep": self.sleep}
 
 
 def human_size(size_bytes: int) -> str:

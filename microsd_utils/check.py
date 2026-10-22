@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # check — the `microsd check` command: find the card, test it, give a verdict
 # Author: Pito Salas and Claude Code
-# Version: 3
+# Version: 4
 # Created: 2026-10-19
-# Updated: 2026-10-21
+# Updated: 2026-10-22
 # Open Source Under MIT license
 """Orchestrates a health check of the card in the designated reader.
 
@@ -35,7 +35,7 @@ from microsd_utils.identity import (
     id_line,
     identify,
     peek,
-    stamp,
+    record_event,
     store,
 )
 from microsd_utils.manifest import Manifest
@@ -154,15 +154,6 @@ def run_passes(env: Env, card: CardInfo, is_destructive: bool) -> Measurements:
         write = write_pass(device.write_at, size_bytes, on_write)
         read = read_pass(device.read_at, size_bytes, on_verify, pattern)
     return Measurements(read, write, random_read, random_write)
-
-
-def record_event(
-    env: Env, manifest: Manifest, kind: str, detail: str, contents: str | None = None
-) -> Manifest:
-    """Add an event to the card's history and save it in the registry."""
-    updated = manifest.with_event(event(env, kind, detail), contents)
-    env.registry.record(updated, stamp(env))
-    return updated
 
 
 def stress_passes(env: Env, card: CardInfo, manifest: Manifest) -> Measurements:

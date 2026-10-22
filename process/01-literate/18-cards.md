@@ -3,14 +3,14 @@ version: "1.0"
 generated: "2026-10-20"
 ---
 
-# cards — `microsd card` and `microsd cards`
+# cards — `microsd card` and `microsd history`
 
 ## What they are for
 
 These two commands are the user's window onto card identity:
 
 - **`make card`** — "what is this card?" Shows the ID, contents and history of the card in the reader. An untagged card gets tagged; a tagged one can have its description updated.
-- **`make cards`** — "what cards do we have?" One line per card in the registry.
+- **`make history`** — "what cards do we have?" One line per card in the registry.
 
 ## No sudo needed
 

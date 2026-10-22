@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 # test_partitions — tests for finding where a card's partitions end
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-22
 # Open Source Under MIT license
 
 import struct
 
 import pytest
 
-from microsd_utils.partitions import HEADER_BYTES, PartitionError, data_end
+from microsd_utils.partitions import (
+    HEADER_BYTES,
+    PartitionError,
+    Region,
+    data_end,
+    regions,
+)
 
 BLOCK = 512
 CARD_BYTES = 62_599_987_200
@@ -90,3 +96,24 @@ def test_gpt_without_used_entries_is_corrupt():
 def test_gpt_entries_outside_header_is_corrupt():
     with pytest.raises(PartitionError, match="outside the header"):
         data_end(gpt(100, entry_count=1_000_000), BLOCK, CARD_BYTES)
+
+
+def test_regions_of_a_pi_card():
+    sector0 = bytes(mbr((0x0C, 8192, 1_048_576), (0x83, 1_056_768, 10_000_000)))[:512]
+    boot_bytes = 8192 * BLOCK
+    root_bytes = 1_056_768 * BLOCK
+    end_bytes = (1_056_768 + 10_000_000) * BLOCK
+    offsets = [0, boot_bytes, boot_bytes + BLOCK, root_bytes, end_bytes]
+    spans = [(offset, offset) for offset in offsets]
+    assert regions(sector0, BLOCK, spans) == {
+        Region("partition table", False): 1,
+        Region("partition 1 (FAT32)", True): 2,
+        Region("partition 2 (Linux)", False): 1,
+        Region("outside any partition", False): 1,
+    }
+
+
+def test_regions_without_a_table():
+    assert regions(bytes(512), BLOCK, [(0, 0), (BLOCK, BLOCK)]) == {
+        Region("outside any partition", False): 2
+    }

@@ -1,6 +1,6 @@
 ---
-version: "1.0"
-generated: "2026-10-19"
+version: "1.1"
+generated: "2026-10-22"
 ---
 
 # swap — waiting for a human to change cards
@@ -35,27 +35,26 @@ def card_poll(diskutil, fingerprint) -> Poll:
 ## One loop, two predicates
 
 ```python
-def wait_until(poll, is_done, waiting_for, clock, sleep):
-    deadline = clock() + SWAP_TIMEOUT_SECONDS
-    while True:
-        card = poll()
-        if is_done(card):
-            return card
-        if clock() >= deadline:
-            raise SwapError(...)
+def wait_until(poll, is_done, sleep):
+    while not is_done(card := poll()):
         sleep(POLL_SECONDS)
+    return card
 ```
 
-`wait_for_removal` and `wait_for_insert` are this loop with `card is None` and `card is not None`. A five-minute timeout keeps an abandoned copy from polling forever.
+`wait_for_removal` and `wait_for_insert` are this loop with `card is None` and `card is not None`.
+
+### No timeout, on purpose
+
+The first version gave up after five minutes. On the first real `copy` (2026-10-22) that was the wrong call: the backup before the swap takes about 17 minutes, the user had walked away, and the copy died with the image saved but no card flashed. A human-paced step shouldn't have a machine-paced deadline, so the wait now lasts until the swap happens or the user presses **Ctrl-C** — and the prompts say so: `(Waiting as long as it takes; Ctrl-C to stop.)`.
 
 ```mermaid
 stateDiagram-v2
     [*] --> MasterIn: backup done
     MasterIn --> Empty: card pulled
-    MasterIn --> Timeout: 300 s
     Empty --> NewIn: card inserted
-    Empty --> Timeout: 300 s
     NewIn --> [*]: flash after confirmation
+    MasterIn --> [*]: Ctrl-C
+    Empty --> [*]: Ctrl-C
 ```
 
 ## Why the master is unmounted, not ejected
@@ -64,10 +63,10 @@ Ejecting would make macOS drop the card from `diskutil` *while it's still physic
 
 ## Testing
 
-Clock and sleep are injected. A `Script` fake replays a sequence of poll results and advances time one interval per sleep, so a five-minute timeout is tested in microseconds and the exact number of polls can be asserted.
+Sleep is injected. A `Script` fake replays a sequence of poll results and advances a virtual clock one interval per sleep, so "still waiting after two hours" is tested in microseconds — 7,200 polls of a card that stays put, then the swap — and the exact number of polls can be asserted.
 
 ## Observations and possible improvements
 
-1. **Unverified assumption:** that this USB reader's disk disappears from `diskutil` when the card is pulled. Some readers keep a zero-size "no media" disk instead. TF02.9 checks this; if it fails, a size-zero card must count as "no card".
+1. **Confirmed on hardware:** this USB reader's disk does disappear from `diskutil` when the card is pulled, and the new card comes back as the same `disk4` (TF02.9, 2026-10-22). Readers that keep a zero-size "no media" disk would need a size-zero card to count as "no card".
 2. **The same physical master can come back.** If the user pulls the master and re-inserts it, the tool can't tell. `copy` prints a CAUTION when the new card's layout matches the master's, and the two-step confirmation shows the card again — but the final defence is the human.
 3. **Event-driven waiting** (DiskArbitration callbacks) would react instantly instead of within a second, at the cost of macOS-specific bindings.

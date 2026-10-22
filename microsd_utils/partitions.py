@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # partitions — where does the data on a card end?
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-22
 # Open Source Under MIT license
 """Find the byte offset where a card's last partition ends.
 
@@ -21,9 +21,16 @@ card holds just its few GB of partitions, and fits a slightly smaller card.
 
 A table that points past the end of the card raises: it's corrupt, and
 guessing a length would produce a broken copy.
+
+`regions` names where on the card given byte offsets fall (an MBR partition
+and its type, the partition table area, or outside any partition), so a
+verify can tell differences in the FAT boot partition, which macOS changes
+whenever it mounts a card, from differences anywhere else.
 """
 
 import struct
+from collections import Counter
+from dataclasses import dataclass
 
 MBR_SIGNATURE = b"\x55\xaa"
 MBR_ENTRIES_OFFSET = 446
@@ -34,8 +41,28 @@ GPT_SIGNATURE = b"EFI PART"
 HEADER_BYTES = 1024 * 1024
 
 
+FAT_TYPES = {0x01, 0x04, 0x06, 0x0B, 0x0C, 0x0E}
+TYPE_NAMES = {
+    0x01: "FAT12",
+    0x04: "FAT16",
+    0x06: "FAT16",
+    0x0B: "FAT32",
+    0x0C: "FAT32",
+    0x0E: "FAT16",
+    0x07: "exFAT/NTFS",
+    0x83: "Linux",
+    GPT_PROTECTIVE_TYPE: "GPT",
+}
+
+
 class PartitionError(Exception):
     """The partition table is present but can't be trusted."""
+
+
+@dataclass(frozen=True)
+class Region:
+    label: str
+    is_fat: bool
 
 
 def mbr_entries(sector0: bytes) -> list[tuple[int, int, int]]:
@@ -88,3 +115,36 @@ def data_end(header: bytes, block_bytes: int, card_bytes: int) -> int | None:
             f"partitions end at {end_bytes} bytes, past the card's {card_bytes}"
         )
     return end_bytes
+
+
+def region_of(
+    entries: list[tuple[int, int, int]], offset: int, block_bytes: int
+) -> Region:
+    for number, (part_type, start_lba, sectors) in enumerate(entries, 1):
+        if start_lba * block_bytes <= offset < (start_lba + sectors) * block_bytes:
+            name = TYPE_NAMES.get(part_type, f"type 0x{part_type:02x}")
+            return Region(f"partition {number} ({name})", part_type in FAT_TYPES)
+    first_bytes = min((start for _, start, _ in entries), default=0) * block_bytes
+    if offset < first_bytes:
+        return Region("partition table", False)
+    return Region("outside any partition", False)
+
+
+def regions(sector0: bytes, block_bytes: int, spans: list[tuple[int, int]]) -> Counter:
+    """How many differing chunks touch each region of the MBR in `sector0`.
+    Each span is a chunk's first and last differing byte; the chunk counts in
+    the regions of both, so a chunk straddling the table and a partition is
+    named by where its bytes actually differ, not where it starts."""
+    has_table = sector0[510:512] == MBR_SIGNATURE
+    entries = mbr_entries(sector0) if has_table else []
+    counts = Counter()
+    for first, last in spans:
+        # dict.fromkeys, not a set: drops a repeat but keeps first-byte order.
+        touched = dict.fromkeys(
+            [
+                region_of(entries, first, block_bytes),
+                region_of(entries, last, block_bytes),
+            ]
+        )
+        counts.update(list(touched))
+    return counts

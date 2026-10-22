@@ -4,10 +4,10 @@ Feature file name must be `FNN-<slug>.md` where `NN` matches the feature number.
 # F04 — Card identity: on-card manifest and repo registry
 **Priority**: High
 **Date Created:** 2026-10-20
-**Done:** no
+**Done:** yes
 **Tasks File Created:** yes
 **Tests Written:** yes
-**Test Passing:** no
+**Test Passing:** yes
 **Description**: Cards get mixed up. Each physical card has a label with a
 1–4 character ID (letters and digits, e.g. `A1`, `PI7`). The tools record that
 ID on the card itself and keep a list of every known card in the repo, so any
@@ -65,7 +65,7 @@ entry.**
 - **`make card`**: show the card in the reader — ID, contents, history. If
   untagged, ask for its ID and tag it. Offers to update the contents
   description.
-- **`make cards`**: list every card in the registry: ID, contents, last event.
+- **`make history`**: list every card in the registry: ID, contents, last event.
 
 ### Safety
 
@@ -93,7 +93,7 @@ ID (say `A1`).
 3. `make flash IMAGE=<raspios>.img.xz` → after verify, prints
    `Manifest written: A1`.
 4. `make card` → history now has a `flash` entry with the image name.
-5. `make cards` → lists `A1`.
+5. `make history` → lists `A1`.
 6. `make stress` → after the run, card is FAT32 named `A1`, history has a
    `stress` entry with the grade.
 

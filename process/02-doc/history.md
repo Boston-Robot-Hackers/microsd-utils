@@ -75,3 +75,37 @@
 
 - **Workflow**: no git worktrees in this repo; work happens in the main
   checkout on `main`.
+
+- **F04 — card identity, closed 2026-10-21**: real-card run on R2 — tag,
+  stress (FAT32 + manifest back), flash of `dome-2-master` (manifest back
+  without reinsertion: macOS sees new partitions after a raw flash),
+  `make card` read and write without sudo, `make cards` (renamed
+  `make history` the same day). Results in TF04.10.
+
+- **F06 — `make verify`, closed 2026-10-22**: read-only chunk-by-chunk compare of a card
+  with an image, naming the partitions that differ and flagging FAT-only
+  differences (macOS mounts). Flash uses the same compare; failed flash and
+  copy are recorded in the registry; a dropped reader says "card
+  disconnected". Prompted by a reader reset at 50% of R2's first flash; the
+  re-flash verified OK (61.9 MB/s write, 77.0 MB/s verify).
+  Real-card check on R2: the first run showed 1 "partition table" chunk
+  because `dome-2-master`'s FAT starts at 1 MiB, inside chunk 0; fixed by
+  labelling chunks by their first and last differing byte. Second run:
+  9 chunks differ, all FAT32, Linux root matches (835 s, 75.0 MB/s).
+
+## 2026-10-22
+
+- **F02 — backup, flash, copy, closed 2026-10-22**: real-card run — backup
+  of the user's Dome2 card (60.7 MB/s; gzip ~15% slower, kept), flash onto
+  R2 and a Pi boot from it, then `make copy` from R1 (the same card, now
+  tagged) onto R4: swap detected both ways (the reader's disk does vanish
+  when the card is pulled), verified OK, R4 booted. The first copy attempt
+  hit the 300 s swap timeout while the user was away; per the user the swap
+  now waits indefinitely (Ctrl-C to stop).
+
+- **F06 report order**: a flaky test showed `regions` ordered a straddling
+  chunk's regions through a set; now first-byte order.
+
+- **Checkpoint 2026-10-22**: transfer's lost-reader handling folded into
+  one helper (`unless_gone`); literate docs 08, 10–15 and 17 refreshed for
+  verify, the swap wait, `record_event` and the `history` rename.

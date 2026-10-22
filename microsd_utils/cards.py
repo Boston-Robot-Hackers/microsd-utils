@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-# cards — the `microsd card` and `microsd cards` commands
+# cards — the `microsd card` and `microsd history` commands
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-20
-# Updated: 2026-10-20
+# Updated: 2026-10-22
 # Open Source Under MIT license
 """Look at card identities.
 
 - **card**: show the card in the reader (ID, contents, history). An untagged
   card is tagged: ask for its label ID, show the manifest, write it after a
   `y`. A tagged card can have its contents description updated.
-- **cards**: list every card in the registry.
+- **history**: list every card in the registry with its last event.
 
 Neither touches the raw device, so they run without sudo; the manifest is
 written as a file on the card's mounted FAT volume.
@@ -53,7 +53,7 @@ def run_card(env: Env, is_dry_run: bool) -> int:
     return EXIT_OK
 
 
-def run_cards(env: Env) -> int:
+def run_history(env: Env) -> int:
     cards = env.registry.all_cards()
     if not cards:
         env.out(f"No cards recorded yet in {env.registry.path}.")

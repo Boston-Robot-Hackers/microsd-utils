@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # swap — wait for the card in the reader to be removed or inserted
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-19
-# Updated: 2026-10-19
+# Updated: 2026-10-22
 # Open Source Under MIT license
 """Waiting for the user to swap cards in the one designated reader.
 
@@ -12,10 +12,13 @@ master can never be picked as the flash target. Each poll runs the normal
 reader discovery: a card (with its identifier), or no card. Anything else
 discovery refuses, such as two matching readers, propagates.
 
-Clock and sleep are injected so tests replay scripted poll sequences.
+There is no timeout: the backup before the swap takes a quarter of an hour,
+so the user may well not be there when it ends. The wait lasts until the
+card is swapped or the user presses Ctrl-C.
+
+Sleep is injected so tests replay scripted poll sequences.
 """
 
-import time
 from collections.abc import Callable
 
 from microsd_utils.reader import (
@@ -27,13 +30,9 @@ from microsd_utils.reader import (
 )
 
 POLL_SECONDS = 1.0
-SWAP_TIMEOUT_SECONDS = 300.0
 
 Poll = Callable[[], CardInfo | None]
-
-
-class SwapError(Exception):
-    """The user didn't swap cards in time."""
+Sleep = Callable[[float], None]
 
 
 def card_poll(diskutil: DiskutilQueries, fingerprint: Fingerprint) -> Poll:
@@ -47,29 +46,16 @@ def card_poll(diskutil: DiskutilQueries, fingerprint: Fingerprint) -> Poll:
 
 
 def wait_until(
-    poll: Poll,
-    is_done: Callable[[CardInfo | None], bool],
-    waiting_for: str,
-    clock: Callable[[], float] = time.monotonic,
-    sleep: Callable[[float], None] = time.sleep,
+    poll: Poll, is_done: Callable[[CardInfo | None], bool], sleep: Sleep
 ) -> CardInfo | None:
-    deadline = clock() + SWAP_TIMEOUT_SECONDS
-    while True:
-        card = poll()
-        if is_done(card):
-            return card
-        if clock() >= deadline:
-            raise SwapError(
-                f"gave up after {SWAP_TIMEOUT_SECONDS:.0f} s waiting for {waiting_for}"
-            )
+    while not is_done(card := poll()):
         sleep(POLL_SECONDS)
+    return card
 
 
-def wait_for_removal(poll: Poll, **timing) -> None:
-    wait_until(poll, lambda card: card is None, "the card to be removed", **timing)
+def wait_for_removal(poll: Poll, sleep: Sleep) -> None:
+    wait_until(poll, lambda card: card is None, sleep)
 
 
-def wait_for_insert(poll: Poll, **timing) -> CardInfo:
-    return wait_until(
-        poll, lambda card: card is not None, "a card to be inserted", **timing
-    )
+def wait_for_insert(poll: Poll, sleep: Sleep) -> CardInfo:
+    return wait_until(poll, lambda card: card is not None, sleep)

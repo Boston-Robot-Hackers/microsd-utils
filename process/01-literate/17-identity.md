@@ -1,6 +1,6 @@
 ---
-version: "1.0"
-generated: "2026-10-20"
+version: "1.1"
+generated: "2026-10-22"
 ---
 
 # identity — which card is this?
@@ -85,9 +85,20 @@ def store(env, card, manifest):
 - **`recheck` first**, the same rule as before any raw I/O: the identifier must still be the fingerprinted card. The partition written to comes from that card's own partition list, so the volume belongs to the card.
 - **No FAT volume is a warning, not an error.** An image with no FAT partition is legitimate. The event still lands in the registry, so the history isn't lost.
 
+## record_event: history without touching the card
+
+```python
+def record_event(env, manifest, kind, detail, contents=None) -> Manifest:
+    updated = manifest.with_event(event(env, kind, detail), contents)
+    env.registry.record(updated, stamp(env))
+    return updated
+```
+
+`store` writes the card *and* the registry; `record_event` writes only the registry. That's what a failure needs: when a stress pass, a format, a flash or a copy fails, the card may be half-written or gone, but its history can still say so (`stress failed: …`, `formatted failed: …`, `flash failed: …`). It moved here from `check.py` when `flash` and `copy` started using it too.
+
 ## Observations and possible improvements
 
 1. **The mount point isn't cross-checked against the disk.** We trust that `diskutil mount diskNsM` returns that partition's mount point. Comparing `diskutil info`'s `ParentWholeDisk` would close that gap cheaply.
 2. **`peek` writes the registry.** That's intended ("seen"), but it means `validate` touches a repo file. A `--no-record` mode isn't needed yet.
-3. **The FAT type list is empirical.** TF04.10 should record the content types the real reader reports for factory, Pi and freshly formatted cards.
+3. **The FAT type list is empirical.** It worked on the real reader for a freshly formatted card and for Pi `bootfs` (TF04.10, 2026-10-21); the exact `Content` strings weren't captured, and a factory exFAT card is still untested.
 4. **`event()` and `stamp()` are thin helpers.** They exist so every timestamp comes from `Env.now` in one format.

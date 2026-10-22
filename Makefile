@@ -3,7 +3,7 @@
 # Only tool targets live here. Development commands (tests, ruff) are run with
 # `uv` directly; see CLAUDE.md.
 
-.PHONY: help validate stress backup flash copy card cards
+.PHONY: help validate stress backup flash verify copy card history
 
 .DEFAULT_GOAL := help
 
@@ -34,6 +34,10 @@ flash: $(MICROSD) ## Write an image to the card, ERASES it (IMAGE=name or path)
 	@test -n "$(IMAGE)" || { echo "usage: make flash IMAGE=<image name or path>"; exit 2; }
 	$(AWAKE) $(MICROSD) flash "$(IMAGE)" $(if $(DRY_RUN),--dry-run)
 
+verify: $(MICROSD) ## Compare the card with an image, read-only (IMAGE=name or path)
+	@test -n "$(IMAGE)" || { echo "usage: make verify IMAGE=<image name or path>"; exit 2; }
+	$(AWAKE) $(MICROSD) verify "$(IMAGE)" $(if $(DRY_RUN),--dry-run)
+
 copy: $(MICROSD) ## Copy a master card to a new card (NAME=... for its image)
 	@test -n "$(NAME)" || { echo "usage: make copy NAME=<image name>"; exit 2; }
 	$(AWAKE) $(MICROSD) copy "$(NAME)" $(if $(DRY_RUN),--dry-run)
@@ -41,5 +45,5 @@ copy: $(MICROSD) ## Copy a master card to a new card (NAME=... for its image)
 card: $(MICROSD) ## Show the card's ID and history; tag it if it has none
 	$(MICROSD) card $(if $(DRY_RUN),--dry-run)
 
-cards: $(MICROSD) ## List every card in the registry
-	$(MICROSD) cards
+history: $(MICROSD) ## List every card in the registry with its last event
+	$(MICROSD) history

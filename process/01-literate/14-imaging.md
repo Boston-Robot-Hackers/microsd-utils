@@ -1,34 +1,38 @@
 ---
-version: "1.1"
-generated: "2026-10-20"
+version: "1.2"
+generated: "2026-10-22"
 ---
 
 # imaging — backup, flash and copy
 
-## Three commands, two building blocks
+## Four commands, three building blocks
 
-`imaging.py` composes the lower layers into three user-facing commands. Most of the work is in two helpers:
+`imaging.py` composes the lower layers into four user-facing commands. Most of the work is in three helpers:
 
 - **`backup_into(env, card, name)`** — unmount, find the data end, stream into a new image, save the sidecar.
-- **`flash_onto(env, card, source)`** — unmount, write, verify, eject.
+- **`flash_onto(env, card, source)`** — unmount, write, then `holds_image` to verify; raise if it doesn't.
+- **`holds_image(env, read_at, card, source)`** — compare the card with the image chunk by chunk and report: `Verified: OK.`, or where it differs.
 
-`backup` is the first helper. `flash` is the second. `copy` is both, with a card swap in between.
+`backup` is the first helper. `flash` is the second. `verify` is the third on its own, read-only. `copy` is backup and flash, with a card swap in between.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    cli --> backup[run_backup] & flash[run_flash] & copy[run_copy]
+    cli --> backup[run_backup] & flash[run_flash] & verify[run_verify] & copy[run_copy]
     backup --> BI[backup_into]
-    flash --> FO[flash_onto]
+    flash & copy --> FR["flash_and_restore<br/>(records failures)"]
+    FR --> FO[flash_onto]
+    FR --> RM["restore_manifest<br/>(identity.store)"]
+    FO --> HI[holds_image]
+    verify --> HI
     copy --> BI
     copy --> swap["take_new_card<br/>(swap.py)"]
-    copy --> FO
     BI --> transfer["transfer.py<br/>copy_length, backup_card"]
     BI --> images["images.py<br/>create, save_info"]
-    FO --> transfer2["transfer.py<br/>write_image, verify_card"]
-    BI & FO --> device["open_card<br/>(re-check, then open)"]
-    flash & copy --> RM["restore_manifest<br/>(identity.store)"]
+    FO --> transfer2["transfer.py<br/>write_image"]
+    HI --> transfer3["transfer.py<br/>compare_card, difference_lines"]
+    BI & FO & verify --> device["open_card<br/>(re-check, then open)"]
 ```
 
 ## The common shape of a command
@@ -72,9 +76,38 @@ def restore_manifest(env, card, manifest):
     env.diskutil.eject(flashed.identifier)
 ```
 
-- **`mount_disk` then re-read the card** — the partition table just changed, so the old `CardInfo` is stale. Whether macOS sees the new partitions without reinsertion is *unverified* until the real-card run (TF04.10).
+- **`mount_disk` then re-read the card** — the partition table just changed, so the old `CardInfo` is stale. macOS does see the new partitions without reinsertion: confirmed on R2 and R4 (2026-10-21/22).
 - **`env.poll()`** rather than `discover` — it is the same "card in the reader now" view `copy` uses for the swap, which keeps the flow testable with a scripted poll.
 - The manifest written is the *target's*, with a `flash` (or `copy`) entry and the image name as contents. A copy can never take the master's ID: `identify` refuses it whether typed or found on the card.
+
+## A failed flash is part of the card's history
+
+The first real flash onto R2 wrote 62.6 GB, then the USB reader reset halfway through verify. Nothing was recorded, so R2's history said nothing about it. `flash` and `copy` now go through one wrapper:
+
+```python
+def flash_and_restore(env, card, source, before, after):
+    try:
+        flash_onto(env, card, source)
+        restore_manifest(env, card, after)
+    except Exception as error:
+        record_event(env, before, after.history[-1].event, f"failed: {error}")
+        raise
+```
+
+`after` is the target's manifest with this run's `flash` or `copy` event; on failure the same event kind is recorded with `failed: <error>` against `before`, then the error propagates. Stress does the same for its passes (`13-check.md`).
+
+## Verify: a read-only second opinion
+
+```python
+def run_verify(env, image, is_dry_run):
+    ...
+    env.diskutil.unmount_disk(card.identifier)
+    with env.open_device(card, False) as device:
+        is_verified = holds_image(env, device.read_at, card, source)
+    return EXIT_OK if is_verified else EXIT_ERROR
+```
+
+Same shape as `backup`: discover, show the ID, plan, sudo, unmount, open **read-only**. It never writes a manifest or a history entry. When chunks differ, `holds_image` prints `difference_lines` — how many chunks, which partitions, and a note when every difference is in a FAT partition, which is what a macOS mount does (`10-transfer.md`). On R2 after `make card` writes, that was the result: 9 chunks, all FAT32, Linux root identical.
 
 ## Copy: the guided flow
 
@@ -102,6 +135,7 @@ Details that matter:
 
 - **The image is kept.** If the user declines at the last step, the message says the image is saved under its name — `flash` can make the copy later without the master.
 - **The master is unmounted, not ejected**, so the removal wait truly waits for a physical pull (see `11-swap.md`).
+- **No deadline on the swap.** The backup takes ~17 minutes, so each wait prints `(Waiting as long as it takes; Ctrl-C to stop.)` (`WAITING`) and lasts until the swap happens.
 - **A look-alike warning.** If the new card has the same size and partition layout as the master, the tool prints a CAUTION. The comparison uses partition *types and sizes* only:
 
 ```python
@@ -115,5 +149,6 @@ Identifiers (`disk4s1` → `disk5s1`) and mount points change every time a card 
 ## Observations and possible improvements
 
 1. **Several copies from one backup.** The spec chose one copy per run; `flash` covers the rest. A `--copies N` loop over the swap/flash half would be a small addition if wanted.
-2. **Resume after a failed flash.** A failed verify leaves the image intact; the message could suggest `make flash IMAGE=<name>` to retry with the same or another card.
+2. **Resume after a failed flash.** A failed verify leaves the image intact; the message could suggest `make flash IMAGE=<name>` to retry with the same or another card. Likewise a `copy` stopped at the swap leaves its image saved, but rerunning `copy` backs the master up again; `flash` from the saved image is the shortcut.
 3. **Card size versus image size.** A Pi image flashed to a larger card leaves the extra space unpartitioned until Pi OS expands its root filesystem on first boot. Worth a line in the README.
+4. **`verify` exits 1 for FAT-only differences**, so `make` prints `Error 1` for a card that is fine. A separate exit code (or 0 with the note) would let scripts tell the two apart.

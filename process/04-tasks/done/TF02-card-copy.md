@@ -118,7 +118,7 @@ run by hand in TF02.9.
 **Test**: `uv run pytest` passes (181 tests, 2026-10-19).
 
 ## TF02.9 — Manual hardware run
-**Status**: not done
+**Status**: done (2026-10-22)
 **Description**: Run the F02 demo with a real Pi card, boot a Pi from the
 copy, and record in `process/02-doc/notes.md`: backup and flash throughput,
 whether gzip slows the backup noticeably (switch to plain `.img` if so), and
@@ -128,3 +128,35 @@ card is pulled (assumed by TF02.4).
 
 **Test**: not automatable — needs physical cards and a Pi. Covered by the
 `manual`-marked tests from TF02.8.
+
+**Results so far** (numbers in `process/02-doc/notes.md`):
+
+- **Backup** (2026-10-21): `dome-2-master` from the user's Pi card, 62.6 GB
+  in 1032 s, 60.7 MB/s, 12.1 GB `.img.gz`. gzip costs ~15%; keeping `.img.gz`.
+
+- **Flash** onto R2 (2026-10-21): first attempt lost to a reader reset at 50%
+  of verify; re-flash verified OK (61.9 MB/s write, 77.0 MB/s verify).
+
+- **Boot** (2026-10-22): a Pi booted from R2 — confirmed by the user.
+
+- **First `make copy NAME=dome-2-copy`** (2026-10-22): backup OK (62.6 GB,
+  1038 s, 60.3 MB/s), then `gave up after 300 s waiting for the card to be
+  removed` — the user wasn't at the Mac when the 17-minute backup ended.
+  **Changed, per user**: the swap waits have no timeout; `copy` waits until
+  the card is swapped or Ctrl-C, and says so. `SwapError` and `Env.clock`
+  removed; tests now poll two hours' worth before the swap.
+
+- **Second `make copy NAME=dome-2-copy2`** (2026-10-22): master R1 ("Working
+  Dome2 microsd. Master.") backed up (1038 s, 60.3 MB/s); removal and
+  insertion both detected — **the reader's disk does vanish from `diskutil`
+  when the card is pulled** (TF02.4 assumption confirmed); new card tagged
+  R4 at the prompt; the "same size and partitions as the master" caution
+  showed (R4 already had R1's layout); flash 1048 s, 59.7 MB/s; verify
+  845 s, 74.0 MB/s, OK; manifest written to R4; ejected; `Copy complete.`
+
+- **Boot of the copy** (2026-10-22): a Pi booted from R4, and macOS showed
+  nothing unusual on the swap — both confirmed by the user.
+
+- **Left**: `make copy` with the master and a second card, boot the copy,
+  and note macOS's behaviour on the swap and whether the reader's disk
+  vanishes from `diskutil` when the card is pulled.

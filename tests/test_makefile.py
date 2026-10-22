@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # test_makefile — the Makefile's tool targets run the expected commands
 # Author: Pito Salas and Claude Code
-# Version: 3
+# Version: 4
 # Created: 2026-10-19
-# Updated: 2026-10-21
+# Updated: 2026-10-22
 # Open Source Under MIT license
 
 import subprocess
@@ -39,10 +39,11 @@ def make(*args: str) -> str:
             ["flash", "IMAGE=pi", "DRY_RUN=1"],
             'caffeinate -i .venv/bin/microsd flash "pi" --dry-run',
         ),
+        (["verify", "IMAGE=pi"], 'caffeinate -i .venv/bin/microsd verify "pi"'),
         (["copy", "NAME=pi"], 'caffeinate -i .venv/bin/microsd copy "pi"'),
         (["card"], ".venv/bin/microsd card"),
         (["card", "DRY_RUN=1"], ".venv/bin/microsd card --dry-run"),
-        (["cards"], ".venv/bin/microsd cards"),
+        (["history"], ".venv/bin/microsd history"),
     ],
 )
 def test_tool_target_commands(args, command):
@@ -57,13 +58,14 @@ def test_help_lists_only_tool_targets():
         "stress",
         "backup",
         "flash",
+        "verify",
         "copy",
         "card",
-        "cards",
+        "history",
     ]
 
 
-@pytest.mark.parametrize("target", ["backup", "flash", "copy"])
+@pytest.mark.parametrize("target", ["backup", "flash", "verify", "copy"])
 def test_missing_variable_prints_usage(target):
     result = subprocess.run(
         ["make", "--no-print-directory", target],

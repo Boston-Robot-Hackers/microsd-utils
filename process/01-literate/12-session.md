@@ -1,6 +1,6 @@
 ---
-version: "1.1"
-generated: "2026-10-20"
+version: "1.2"
+generated: "2026-10-22"
 ---
 
 # session — what every command shares
@@ -26,12 +26,11 @@ class Env:
     images: ImageStore
     registry: Registry
     poll: Poll
-    clock: Callable[[], float]
     sleep: Callable[[float], None]
     now: Callable[[], datetime]
 ```
 
-Two fields came with card identity: **`registry`**, the repo's list of known cards, and **`now`**, the wall clock used to timestamp history entries. `clock` stays monotonic for timeouts; `now` is the calendar time a human reads back later, and injecting it makes history entries exact in tests.
+Two fields came with card identity: **`registry`**, the repo's list of known cards, and **`now`**, the wall clock used to timestamp history entries; injecting it makes history entries exact in tests. There is no monotonic `clock` any more: it existed only for the card-swap timeout, which was removed on 2026-10-22 (see `11-swap.md`). `sleep` remains, so the swap polling runs instantly in tests.
 
 Production builds one in `cli.real_env()`; tests build one in `tests/fakes.make_test_env()` with recording fakes. Because *every* interaction with the world goes through these fields, the tests can assert negatives — "nothing was opened", "nothing was unmounted" — that would otherwise need real hardware to check.
 

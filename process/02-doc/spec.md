@@ -51,12 +51,17 @@ Each tool, or a group of closely related tools, becomes a feature (`F01`, `F02`,
   with "card disconnected" instead of counting bad chunks. The Makefile runs
   long commands under `caffeinate -i` so the Mac stays awake.
 
-- **Backup, flash and copy (macOS)**: three related commands built on one
+- **Backup, flash, copy and verify (macOS)**: related commands built on one
   image store, `images/` in the repo (git-ignored; images are kept for reuse):
   - *backup*: read a card into a compressed image file.
   - *flash*: write an image file to a card, then verify it by reading it back.
   - *copy*: back up the master card in the slot, ask the user to swap in a
     new card, then flash it. One new card per run.
+  - *verify* (F06): compare the card with an image, read-only, and report
+    where it differs; differences only inside a FAT partition are flagged as
+    the likely effect of macOS mounting the card. Flash's read-back uses the
+    same comparison, and a failed flash or copy is recorded in the card's
+    history.
 
   Only the data up to the end of the last partition is copied, so a slightly
   smaller target card still works; a card smaller than that is refused.

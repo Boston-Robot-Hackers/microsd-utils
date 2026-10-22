@@ -43,6 +43,7 @@
       }
     ]
   },
+  "worktree": { "bgIsolation": "none" },
   "autoMode": {
     "environment": [
       "### Project: <APP NAME>",

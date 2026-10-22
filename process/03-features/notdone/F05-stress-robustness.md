@@ -57,7 +57,7 @@ turned a healthy card into a false RETIRE.
 **Setup**: the test card (R2) in the NORELSYS reader.
 
 **Steps**:
-1. `make stress`, and let it finish: the registry (`make cards`) shows a
+1. `make stress`, and let it finish: the registry (`make history`) shows a
    `stress` event, then `formatted FAT32`.
 2. `make validate`, and pull the card out during the read pass.
 3. `make card` with a card under 1 GB, if one is at hand.

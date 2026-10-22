@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # identity — find out which labelled card is in the reader, and keep it recorded
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-20
-# Updated: 2026-10-20
+# Updated: 2026-10-22
 # Open Source Under MIT license
 """Which card is this? The flow every command shares.
 
@@ -144,3 +144,12 @@ def store(env: Env, card: CardInfo, manifest: Manifest) -> None:
 
 def event(env: Env, kind: str, detail: str = "") -> Event:
     return make_event(stamp(env), kind, detail)
+
+
+def record_event(
+    env: Env, manifest: Manifest, kind: str, detail: str, contents: str | None = None
+) -> Manifest:
+    """Add an event to the card's history and save it in the registry."""
+    updated = manifest.with_event(event(env, kind, detail), contents)
+    env.registry.record(updated, stamp(env))
+    return updated

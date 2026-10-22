@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# test_cards — tests for the `microsd card` and `microsd cards` commands
+# test_cards — tests for the `microsd card` and `microsd history` commands
 # Author: Pito Salas and Claude Code
-# Version: 1
+# Version: 2
 # Created: 2026-10-20
-# Updated: 2026-10-20
+# Updated: 2026-10-22
 # Open Source Under MIT license
 
-from microsd_utils.cards import run_card, run_cards
+from microsd_utils.cards import run_card, run_history
 from microsd_utils.manifest import Manifest, read_manifest
 from microsd_utils.session import EXIT_OK
 from tests.fakes import NOW_TEXT, Recorder, make_test_env, tag
@@ -67,7 +67,7 @@ def test_cards_lists_registry(tmp_path):
     tagged = tag(tmp_path / "volume")
     env.registry.record(tagged, NOW_TEXT)
     env.registry.record(Manifest("B2", "", ()), NOW_TEXT)
-    assert run_cards(env) == EXIT_OK
+    assert run_history(env) == EXIT_OK
     assert recorder.lines[0].startswith("A1    raspios")
     assert f"last: tagged {NOW_TEXT}" in recorder.lines[0]
     assert recorder.lines[1].startswith("B2    -")
@@ -76,5 +76,5 @@ def test_cards_lists_registry(tmp_path):
 
 def test_cards_empty_registry(tmp_path):
     env, recorder = card_env(tmp_path)
-    run_cards(env)
+    run_history(env)
     assert recorder.lines[0].startswith("No cards recorded yet")

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # test_imaging — tests for the backup, flash and copy commands, all faked
 # Author: Pito Salas and Claude Code
-# Version: 2
+# Version: 3
 # Created: 2026-10-19
-# Updated: 2026-10-20
+# Updated: 2026-10-22
 # Open Source Under MIT license
 
 import gzip
@@ -13,7 +13,7 @@ import pytest
 
 from microsd_utils import imaging
 from microsd_utils.images import ImageError, ImageStore
-from microsd_utils.imaging import run_backup, run_copy, run_flash
+from microsd_utils.imaging import run_backup, run_copy, run_flash, run_verify
 from microsd_utils.manifest import manifest_path, read_manifest
 from microsd_utils.passes import CHUNK_BYTES
 from microsd_utils.reader import CardInfo, NoCardError, Partition
@@ -207,7 +207,7 @@ def test_copy_asks_for_master_when_reader_empty(store, tmp_path):
         work_dir=tmp_path,
     )
     assert run_copy(env, "pi", is_dry_run=False) == EXIT_OK
-    assert "Insert the MASTER card into the reader." in recorder.lines
+    assert "Insert the MASTER card into the reader." in recorder.text
 
 
 def test_copy_not_confirmed_keeps_image_and_writes_nothing(store):
@@ -394,3 +394,81 @@ def test_copy_without_fat_on_new_card_records_registry_only(store, tmp_path):
     assert "registry only" in recorder.text
     last = env.registry.lookup("B2").history[-1]
     assert (last.event, last.detail) == ("copy", "from an untagged master via image pi")
+
+
+def verify_env(store, card, recorder, is_root=True):
+    return make_test_env(
+        recorder, {"disk4": card}, CARD_BYTES, images=store, is_root=is_root
+    )
+
+
+def test_verify_matching_card_reads_only(store):
+    master = backed_up(store)
+    recorder = Recorder()
+    env = verify_env(store, master, recorder)
+    assert run_verify(env, "pi", is_dry_run=False) == EXIT_OK
+    assert "Verified: OK." in recorder.lines
+    assert "The card is only read." in recorder.text
+    assert recorder.opened == [("disk4", False)]
+    assert env.diskutil.unmounted == ["disk4"]
+    assert master.writes == 0
+    assert recorder.prompts == []
+
+
+def test_verify_differing_card_reports_where_and_fails(store):
+    master = backed_up(store)
+    card = FakeCard(CARD_BYTES, corrupt_offset=CHUNK_BYTES)
+    card.store[:] = master.store
+    recorder = Recorder()
+    env = verify_env(store, card, recorder)
+    assert run_verify(env, "pi", is_dry_run=False) == EXIT_ERROR
+    assert "Differs: 1 of 3 chunks (4 MiB each)" in recorder.lines
+    assert "  partition 1 (Linux): 1" in recorder.lines
+    assert "Verified: OK." not in recorder.lines
+    assert card.writes == 0
+
+
+@pytest.mark.parametrize("is_root, is_dry_run", [(True, True), (False, False)])
+def test_verify_dry_run_and_unprivileged_touch_nothing(store, is_root, is_dry_run):
+    master = backed_up(store)
+    recorder = Recorder()
+    env = verify_env(store, master, recorder, is_root=is_root)
+    assert run_verify(env, "pi", is_dry_run) == EXIT_OK
+    assert recorder.opened == []
+    assert env.diskutil.unmounted == []
+
+
+def test_flash_verify_failure_says_where_and_is_recorded(store, work):
+    backed_up(store)
+    target = FakeCard(CARD_BYTES, corrupt_offset=2 * CHUNK_BYTES)
+    recorder = Recorder(answers=YES)
+    env = make_test_env(
+        recorder, {"disk4": target}, CARD_BYTES, images=store, work_dir=work
+    )
+    with pytest.raises(TransferError, match="verification failed"):
+        run_flash(env, "pi", is_dry_run=False)
+    assert "  partition 1 (Linux): 1" in recorder.lines
+    last = env.registry.lookup("A1").history[-1]
+    assert last.event == "flash"
+    assert last.detail.startswith("failed: verification failed")
+    assert env.diskutil.ejected == []
+
+
+def test_flash_write_error_is_recorded(store, work):
+    class BrokenCard(FakeCard):
+        def write_at(self, offset, data):
+            raise OSError("I/O error")
+
+    backed_up(store)
+    recorder = Recorder(answers=YES)
+    env = make_test_env(
+        recorder,
+        {"disk4": BrokenCard(CARD_BYTES)},
+        CARD_BYTES,
+        images=store,
+        work_dir=work,
+    )
+    with pytest.raises(OSError, match="I/O error"):
+        run_flash(env, "pi", is_dry_run=False)
+    last = env.registry.lookup("A1").history[-1]
+    assert (last.event, last.detail) == ("flash", "failed: I/O error")
